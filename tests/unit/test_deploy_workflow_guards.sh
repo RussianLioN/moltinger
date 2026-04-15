@@ -261,20 +261,24 @@ test_deploy_script_verifies_live_moltis_runtime_contract() {
     test_pass
 }
 
-test_deploy_workflow_runs_real_openai_codex_chat_canary() {
-    test_start "Deploy workflow should run a real OpenAI Codex chat canary after rollout"
+test_deploy_workflow_runs_non_llm_runtime_validation() {
+    test_start "Deploy workflow should validate runtime config without calling an LLM"
 
     if [[ ! -f "$DEPLOY_WORKFLOW" ]]; then
         test_skip "Missing workflow file: $DEPLOY_WORKFLOW"
         return
     fi
 
-    if ! grep -Fq 'Test 8: Real OpenAI Codex chat canary' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq 'scripts/test-moltis-api.sh' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq 'EXPECTED_PROVIDER="openai-codex"' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq 'EXPECTED_MODEL="openai-codex::gpt-5.4"' "$DEPLOY_WORKFLOW" || \
-       ! grep -Fq 'EXPECTED_REPLY_TEXT="OK"' "$DEPLOY_WORKFLOW"; then
-        test_fail "deploy.yml must prove the live OpenAI Codex chat path with scripts/test-moltis-api.sh against openai-codex::gpt-5.4"
+    if ! grep -Fq 'Test 7: Runtime Moltis TOML syntax' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'Test 8: Runtime Ollama and failover contract' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'Test 9: Ollama fallback container status' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'tomllib.load(handle)' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'ollama-fallback container is not running' "$DEPLOY_WORKFLOW" || \
+       ! grep -Fq 'Direct provider and LLM validation is disabled in GitHub Actions.' "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'scripts/test-moltis-api.sh' "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'EXPECTED_PROVIDER="openai-codex"' "$DEPLOY_WORKFLOW" || \
+       grep -Fq 'EXPECTED_MODEL="openai-codex::gpt-5.4"' "$DEPLOY_WORKFLOW"; then
+        test_fail "deploy.yml must validate runtime TOML, Ollama, and failover contracts without calling a live LLM from GitHub Actions"
         return
     fi
 
@@ -1790,7 +1794,7 @@ run_all_tests() {
     test_moltis_env_workflows_use_shared_render_script
     test_tracked_deploy_workflows_use_shared_script_entrypoint
     test_deploy_script_verifies_live_moltis_runtime_contract
-    test_deploy_workflow_runs_real_openai_codex_chat_canary
+    test_deploy_workflow_runs_non_llm_runtime_validation
     test_deploy_script_exports_live_docker_socket_gid_for_browser_sandbox
     test_deploy_script_prepares_tracked_browser_sandbox_image
     test_deploy_script_force_recreates_moltis_runtime_on_rollout

@@ -1,13 +1,14 @@
-name: Claude Interactive Assistant
+name: AI IDE Assistant Handoff
 
-# Interactive assistant workflow powered by Z.ai Coding Plan.
-# Triggered by @claude or @zai mentions in issues/PR comments/reviews.
+# Deterministic assistant handoff workflow.
+# GitHub Actions collects context and posts a sticky handoff comment.
+# Any AI response must be completed manually in AI IDE.
 
 on:
   workflow_dispatch:
     inputs:
       target_number:
-        description: "Issue/PR number for assistant response"
+        description: "Issue/PR number for assistant handoff"
         required: true
         type: number
       target_kind:
@@ -19,9 +20,9 @@ on:
           - pr
           - issue
       message:
-        description: "Assistant request (include @zai or @claude)"
+        description: "Assistant request (prefer @ai-ide; legacy @claude/@zai still trigger handoff)"
         required: true
-        default: "@zai Please summarize risks in this change."
+        default: "@ai-ide Please summarize review risks for this change."
         type: string
 
   issue_comment:
@@ -37,30 +38,38 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  actions: read
 
 jobs:
-  claude-assistant:
-    name: Claude Assistant
+  ai-ide-assistant:
+    name: Assistant Handoff
     if: |
       (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
-      (github.event_name == 'pull_request_review_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, '@zai'))) ||
-      (github.event_name == 'pull_request_review' && (contains(github.event.review.body, '@claude') || contains(github.event.review.body, '@zai'))) ||
+      (github.event_name == 'issue_comment' && (
+        contains(github.event.comment.body, '@ai-ide') ||
+        contains(github.event.comment.body, '@claude') ||
+        contains(github.event.comment.body, '@zai')
+      )) ||
+      (github.event_name == 'pull_request_review_comment' && (
+        contains(github.event.comment.body, '@ai-ide') ||
+        contains(github.event.comment.body, '@claude') ||
+        contains(github.event.comment.body, '@zai')
+      )) ||
+      (github.event_name == 'pull_request_review' && (
+        contains(github.event.review.body, '@ai-ide') ||
+        contains(github.event.review.body, '@claude') ||
+        contains(github.event.review.body, '@zai')
+      )) ||
       (github.event_name == 'issues' && (
+        contains(github.event.issue.body, '@ai-ide') ||
         contains(github.event.issue.body, '@claude') ||
         contains(github.event.issue.body, '@zai') ||
+        contains(github.event.issue.title, '@ai-ide') ||
         contains(github.event.issue.title, '@claude') ||
         contains(github.event.issue.title, '@zai')
       ))
 
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GLM_API_BASE: https://api.z.ai/api/coding/paas/v4
-      GLM_MODEL: glm-5
-      AI_ASSISTANT_MAX_CONTEXT_CHARS: "35000"
-      AI_REVIEW_PROVIDER: ${{ vars.AI_REVIEW_PROVIDER }}
 
     steps:
       - name: Checkout repository
@@ -72,214 +81,214 @@ jobs:
         run: |
           command -v gh >/dev/null 2>&1 || (echo "::error::gh CLI is required" && exit 1)
           command -v jq >/dev/null 2>&1 || (echo "::error::jq is required" && exit 1)
-          command -v curl >/dev/null 2>&1 || (echo "::error::curl is required" && exit 1)
 
-      - name: Build assistant reply (Z.ai)
-        id: assistant
+      - name: Build AI IDE handoff
+        id: handoff
         env:
           GH_TOKEN: ${{ github.token }}
-          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          INPUT_MESSAGE: ${{ inputs.message }}
+          INPUT_TARGET_KIND: ${{ inputs.target_kind }}
+          INPUT_TARGET_NUMBER: ${{ inputs.target_number }}
         run: |
           set -euo pipefail
 
-          mkdir -p .tmp
+          mkdir -p reports .tmp
 
           event_name="${GITHUB_EVENT_NAME}"
-          provider="${AI_REVIEW_PROVIDER:-zai}"
           event_path="${GITHUB_EVENT_PATH}"
 
           issue_number=""
           request_text=""
           request_author="unknown"
-          is_pr="false"
-          status="fallback"
-          reason=""
+          target_kind="issue"
+          marker=""
+          report_path=""
+          comment_path=""
+          status="ready"
+          reason="Context collected successfully."
 
           case "$event_name" in
             workflow_dispatch)
-              issue_number="${{ inputs.target_number }}"
-              request_text="${{ inputs.message }}"
+              issue_number="${INPUT_TARGET_NUMBER}"
+              request_text="$(printf '%s' "${INPUT_MESSAGE}")"
               request_author="${GITHUB_ACTOR}"
-              if [[ "${{ inputs.target_kind }}" == "pr" ]]; then
-                is_pr="true"
-              fi
+              target_kind="${INPUT_TARGET_KIND}"
               ;;
             issue_comment)
               issue_number="$(jq -r '.issue.number // empty' "$event_path")"
               request_text="$(jq -r '.comment.body // ""' "$event_path")"
               request_author="$(jq -r '.comment.user.login // "unknown"' "$event_path")"
               if jq -e '.issue.pull_request != null' "$event_path" >/dev/null 2>&1; then
-                is_pr="true"
+                target_kind="pr"
               fi
               ;;
             pull_request_review_comment)
               issue_number="$(jq -r '.pull_request.number // empty' "$event_path")"
               request_text="$(jq -r '.comment.body // ""' "$event_path")"
               request_author="$(jq -r '.comment.user.login // "unknown"' "$event_path")"
-              is_pr="true"
+              target_kind="pr"
               ;;
             pull_request_review)
               issue_number="$(jq -r '.pull_request.number // empty' "$event_path")"
               request_text="$(jq -r '.review.body // ""' "$event_path")"
               request_author="$(jq -r '.review.user.login // "unknown"' "$event_path")"
-              is_pr="true"
+              target_kind="pr"
               ;;
             issues)
               issue_number="$(jq -r '.issue.number // empty' "$event_path")"
-              issue_title="$(jq -r '.issue.title // ""' "$event_path")"
-              issue_body="$(jq -r '.issue.body // ""' "$event_path")"
-              request_text="${issue_title}\n\n${issue_body}"
+              request_title="$(jq -r '.issue.title // ""' "$event_path")"
+              request_body="$(jq -r '.issue.body // ""' "$event_path")"
+              request_text="$(printf '%s\n\n%s' "$request_title" "$request_body")"
               request_author="$(jq -r '.issue.user.login // "unknown"' "$event_path")"
+              target_kind="issue"
               ;;
             *)
+              status="degraded"
               reason="Unsupported event: ${event_name}"
               ;;
           esac
 
-          marker="zai-assistant:thread-${issue_number:-unknown}"
-          prompt_path=".tmp/assistant-${issue_number:-unknown}-prompt.md"
-          output_path=".tmp/assistant-${issue_number:-unknown}-output.md"
-          raw_response_path=".tmp/assistant-${issue_number:-unknown}-raw-response.json"
-          comment_path=".tmp/assistant-${issue_number:-unknown}-comment.md"
-          context_path=".tmp/assistant-${issue_number:-unknown}-context.md"
+          marker="ai-ide-assistant:thread-${issue_number:-unknown}"
+          report_path="reports/thread-${issue_number:-unknown}-ai-ide-handoff.md"
+          comment_path=".tmp/thread-${issue_number:-unknown}-ai-ide-comment.md"
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          title="(unavailable)"
+          body="(unavailable)"
+          url=""
+          files_summary="- File list unavailable"
+          checks_summary="- Check the PR Checks tab for the latest CI state."
 
           if [[ -z "$issue_number" ]]; then
+            status="degraded"
             reason="Unable to determine issue/PR number from event payload."
-          elif [[ "$provider" == "off" ]]; then
-            reason="AI provider disabled by AI_REVIEW_PROVIDER=off."
-          elif [[ -z "${GLM_API_KEY:-}" ]]; then
-            reason="Missing GLM_API_KEY secret."
-          elif ! printf '%s' "$request_text" | grep -Eiq '@(claude|zai)\b'; then
-            reason="Mention not detected in message text."
-          else
-            if [[ "$is_pr" == "true" ]]; then
-              pr_json="$(gh pr view "$issue_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
-              if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
-                reason="Failed to fetch PR context via gh pr view."
-              else
-                gh pr diff "$issue_number" > "$context_path" 2>/dev/null || true
-                max_chars="${AI_ASSISTANT_MAX_CONTEXT_CHARS:-35000}"
-                context_size="$(wc -c < "$context_path" | tr -d ' ' || echo 0)"
-                if [[ "$context_size" -gt "$max_chars" ]]; then
-                  head -c "$max_chars" "$context_path" > "${context_path}.trimmed"
-                  printf '\n\n[context diff truncated to %s chars]\n' "$max_chars" >> "${context_path}.trimmed"
-                  mv "${context_path}.trimmed" "$context_path"
-                fi
+          fi
 
-                {
-                  echo "Repository: ${GITHUB_REPOSITORY}"
-                  echo "Event: ${event_name}"
-                  echo "Requester: ${request_author}"
-                  echo "PR Number: ${issue_number}"
-                  echo "PR URL: $(echo "$pr_json" | jq -r '.url // ""')"
-                  echo "PR Title: $(echo "$pr_json" | jq -r '.title // "(no title)"')"
-                  echo "PR Description:"
-                  echo "$(echo "$pr_json" | jq -r '.body // "(no description)"')"
-                  echo ""
-                  echo "User request:"
-                  echo "$request_text"
-                  echo ""
-                  echo "Recent PR diff (possibly truncated):"
-                  cat "$context_path"
-                  echo ""
-                  echo "Instructions:"
-                  echo "- Answer the user's request directly."
-                  echo "- Be concise and actionable."
-                  echo "- Use file:line references when possible."
-                  echo "- Do not claim actions you did not perform."
-                } > "$prompt_path"
-              fi
+          if [[ "$status" == "ready" && "$target_kind" == "pr" ]]; then
+            pr_json="$(gh pr view "$issue_number" --json title,body,url,changedFiles,additions,deletions 2>/dev/null || true)"
+            if [[ -z "$pr_json" || "$pr_json" == "null" ]]; then
+              status="degraded"
+              reason="Failed to fetch PR context via gh pr view."
             else
-              issue_json="$(gh issue view "$issue_number" --json title,body,url 2>/dev/null || true)"
-              if [[ -z "$issue_json" || "$issue_json" == "null" ]]; then
-                reason="Failed to fetch issue context via gh issue view."
-              else
-                {
-                  echo "Repository: ${GITHUB_REPOSITORY}"
-                  echo "Event: ${event_name}"
-                  echo "Requester: ${request_author}"
-                  echo "Issue Number: ${issue_number}"
-                  echo "Issue URL: $(echo "$issue_json" | jq -r '.url // ""')"
-                  echo "Issue Title: $(echo "$issue_json" | jq -r '.title // "(no title)"')"
-                  echo "Issue Body:"
-                  echo "$(echo "$issue_json" | jq -r '.body // "(no description)"')"
-                  echo ""
-                  echo "User request:"
-                  echo "$request_text"
-                  echo ""
-                  echo "Instructions:"
-                  echo "- Answer the user's request directly."
-                  echo "- Be concise and actionable."
-                  echo "- If data is missing, state exactly what is missing."
-                } > "$prompt_path"
+              title="$(echo "$pr_json" | jq -r '.title // "(no title)"')"
+              body="$(echo "$pr_json" | jq -r '.body // "(no description)"')"
+              url="$(echo "$pr_json" | jq -r '.url // ""')"
+              api_files="$(
+                gh api "repos/${GITHUB_REPOSITORY}/pulls/${issue_number}/files?per_page=100" --paginate \
+                  --jq '.[] | "- \(.filename) (+\(.additions // 0)/-\(.deletions // 0))"' 2>/dev/null \
+                  | sed -n '1,40p' || true
+              )"
+              if [[ -n "$api_files" ]]; then
+                files_summary="$api_files"
               fi
-            fi
 
-            if [[ -z "$reason" ]]; then
-              if ZAI_RAW_RESPONSE_FILE="$raw_response_path" scripts/ci/zai_chat_completion.sh \
-                --prompt-file "$prompt_path" \
-                --output-file "$output_path" \
-                --system-prompt "You are the repository assistant. Reply in the same language as the user request. Keep it concise and concrete." \
-                --model "${GLM_MODEL:-glm-5}" \
-                --api-base "${GLM_API_BASE:-https://api.z.ai/api/coding/paas/v4}" \
-                --max-tokens 900 \
-                --temperature 0.3 \
-                --timeout-seconds 90 \
-                --retry-count 1; then
-                status="success"
-                reason="OK"
-              else
-                rc="$?"
-                reason="z.ai request failed (exit code ${rc})."
-              fi
+            fi
+          elif [[ "$status" == "ready" ]]; then
+            issue_json="$(gh issue view "$issue_number" --json title,body,url 2>/dev/null || true)"
+            if [[ -z "$issue_json" || "$issue_json" == "null" ]]; then
+              status="degraded"
+              reason="Failed to fetch issue context via gh issue view."
+            else
+              title="$(echo "$issue_json" | jq -r '.title // "(no title)"')"
+              body="$(echo "$issue_json" | jq -r '.body // "(no description)"')"
+              url="$(echo "$issue_json" | jq -r '.url // ""')"
             fi
           fi
 
-          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          if [[ "$status" == "success" ]]; then
-            reply_body="$(cat "$output_path")"
-            status_line="✅ Completed (z.ai)"
+          if [[ "$status" == "ready" ]]; then
+            status_line="✅ Ready for AI IDE"
           else
-            reply_body="Assistant is currently unavailable in active mode. Fallback reason: ${reason}"
-            status_line="⚠️ Fallback"
+            status_line="⚠️ Degraded context (${reason})"
           fi
 
           {
+            echo "# AI IDE Assistant Handoff"
+            echo ""
+            echo "**Status**: ${status_line}"
+            echo "**Target**: ${target_kind^^} #${issue_number:-unknown}"
+            echo "**Requested by**: ${request_author}"
+            echo "**Prepared**: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "## Workflow mode"
+            echo "- GitHub Actions no longer invokes any LLM for assistant replies."
+            echo "- This workflow only prepares deterministic context for manual work in AI IDE."
+            echo ""
+            echo "## Requested message"
+            echo "${request_text:-"(no request text)"}"
+            echo ""
+            echo "## Target details"
+            if [[ -n "$url" ]]; then
+              echo "- URL: ${url}"
+            fi
+            echo "- Title: ${title}"
+            echo ""
+            echo "## Description"
+            echo "${body}"
+            echo ""
+            if [[ "$target_kind" == "pr" ]]; then
+              echo "## Changed files"
+              echo "${files_summary}"
+              echo ""
+              echo "## Current CI checks"
+              echo "${checks_summary}"
+              echo ""
+            fi
+            echo "## AI IDE handoff"
+            echo "1. Open ${target_kind^^} #${issue_number:-unknown} in your AI IDE."
+            echo "2. Use this artifact and current CI status as the response baseline."
+            echo "3. Publish the final response manually from the IDE or as a human-authored GitHub comment."
+          } > "$report_path"
+
+          {
             echo "<!-- ${marker} -->"
-            echo "### Z.ai Assistant"
+            echo "### AI IDE Assistant Handoff"
             echo ""
-            echo "${reply_body}"
+            echo "**Status**: ${status_line}"
+            echo "**Target**: ${target_kind^^} #${issue_number:-unknown}"
+            echo "**Workflow mode**: Deterministic context only"
             echo ""
-            echo "---"
-            echo "Status: ${status_line}"
-            echo "Triggered by @${request_author} via \`${event_name}\`."
+            echo "GitHub Actions no longer runs any LLM for assistant replies."
+            echo "Continue the request manually in AI IDE."
+            echo ""
+            echo "Legacy @claude / @zai mentions now produce handoff context only."
+            echo ""
             echo "[View workflow run](${run_url})"
           } > "$comment_path"
 
           {
-            echo "## Interactive Assistant"
-            echo "- Event: ${event_name}"
-            echo "- Target: #${issue_number:-unknown}"
+            echo "## AI IDE Assistant Handoff"
+            echo "- Target: ${target_kind^^} #${issue_number:-unknown}"
             echo "- Status: ${status_line}"
-            echo "- Provider: ${provider:-zai}"
+            echo "- Requested by: ${request_author}"
+            echo "- Workflow mode: Deterministic context only"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "issue_number=${issue_number}" >> "$GITHUB_OUTPUT"
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
-          echo "marker=${marker}" >> "$GITHUB_OUTPUT"
-          echo "comment_path=${comment_path}" >> "$GITHUB_OUTPUT"
+          {
+            echo "issue_number=${issue_number}"
+            echo "status=${status}"
+            echo "reason=${reason}"
+            echo "marker=${marker}"
+            echo "report_path=${report_path}"
+            echo "comment_path=${comment_path}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upsert sticky thread comment
-        if: steps.assistant.outputs.issue_number != ''
+        if: steps.handoff.outputs.issue_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! scripts/ci/upsert_sticky_comment.sh \
+          scripts/ci/upsert_sticky_comment.sh \
             --repo "${GITHUB_REPOSITORY}" \
-            --issue-number "${{ steps.assistant.outputs.issue_number }}" \
-            --marker "${{ steps.assistant.outputs.marker }}" \
-            --body-file "${{ steps.assistant.outputs.comment_path }}"; then
-            echo "::warning::Unable to publish/update sticky assistant comment."
-          fi
+            --issue-number "${{ steps.handoff.outputs.issue_number }}" \
+            --marker "${{ steps.handoff.outputs.marker }}" \
+            --body-file "${{ steps.handoff.outputs.comment_path }}"
+
+      - name: Upload handoff artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ide-assistant-thread-${{ steps.handoff.outputs.issue_number || 'unknown' }}
+          path: ${{ steps.handoff.outputs.report_path }}
+          retention-days: 30
+          if-no-files-found: warn

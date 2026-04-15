@@ -1319,26 +1319,70 @@ jobs:
             test -f "$RUNTIME_CONFIG_DIR/moltis.toml"
             echo "Runtime config OK: $RUNTIME_CONFIG_DIR"
 
-            # Test 7: Provider auth status evidence
-            echo "Test 7: Provider auth status..."
+            # Test 7: Runtime Moltis TOML syntax
+            echo "Test 7: Runtime Moltis TOML syntax..."
+            python3 - "$RUNTIME_CONFIG_DIR/moltis.toml" <<'PY'
+            import pathlib
+            import sys
+            import tomllib
+
+            config_path = pathlib.Path(sys.argv[1])
+            with config_path.open("rb") as handle:
+                tomllib.load(handle)
+
+            print(f"Runtime TOML OK: {config_path}")
+            PY
+
+            # Test 8: Runtime Ollama and failover contract
+            echo "Test 8: Runtime Ollama and failover contract..."
+            python3 - "$RUNTIME_CONFIG_DIR/moltis.toml" <<'PY'
+            import pathlib
+            import sys
+            import tomllib
+
+            config_path = pathlib.Path(sys.argv[1])
+            with config_path.open("rb") as handle:
+                config = tomllib.load(handle)
+
+            providers = config.get("providers", {})
+            ollama = providers.get("ollama")
+            if not isinstance(ollama, dict):
+                raise SystemExit("Missing [providers.ollama] in runtime config")
+            if not ollama.get("enabled", False):
+                raise SystemExit("Runtime config has [providers.ollama] but it is not enabled")
+            if not ollama.get("base_url"):
+                raise SystemExit("Runtime config is missing providers.ollama.base_url")
+
+            failover = config.get("failover")
+            if not isinstance(failover, dict):
+                raise SystemExit("Missing [failover] in runtime config")
+            if not failover.get("enabled", False):
+                raise SystemExit("Runtime config has failover disabled")
+            fallback_models = failover.get("fallback_models", [])
+            if not any(str(model).startswith("ollama::") for model in fallback_models):
+                raise SystemExit("Failover contract must include an ollama:: fallback model")
+
+            print("Runtime failover contract OK")
+            PY
+
+            # Test 9: Ollama fallback container status
+            echo "Test 9: Ollama fallback container status..."
+            OLLAMA_STATE=$(docker inspect --format '{{.State.Status}}' ollama-fallback 2>/dev/null || true)
+            if [ "$OLLAMA_STATE" != "running" ]; then
+              echo "::error::ollama-fallback container is not running (state: ${OLLAMA_STATE:-missing})"
+              exit 1
+            fi
+            echo "Ollama fallback container OK (state: $OLLAMA_STATE)"
+
+            # Test 10: Provider auth status evidence
+            echo "Test 10: Provider auth status..."
             AUTH_STATUS=$(docker exec moltis moltis auth status 2>&1 || true)
             echo "$AUTH_STATUS"
             if printf '%s' "$AUTH_STATUS" | grep -q 'No authenticated providers.'; then
               echo "::warning::No authenticated providers are currently loaded in live Moltis"
             fi
 
-            # Test 8: Real OpenAI Codex chat canary
-            echo "Test 8: Real OpenAI Codex chat canary..."
-            MOLTIS_ACTIVE_ROOT="${{ env.DEPLOY_ACTIVE_PATH }}" \
-            MOLTIS_URL="http://localhost:13131" \
-            TEST_TIMEOUT="25" \
-            EXPECTED_PROVIDER="openai-codex" \
-            EXPECTED_MODEL="openai-codex::gpt-5.4" \
-            EXPECTED_REPLY_TEXT="OK" \
-            bash "${{ env.DEPLOY_ACTIVE_PATH }}/scripts/test-moltis-api.sh" \
-              "Reply with exactly OK and nothing else."
-
-            echo "All smoke tests passed!"
+            echo "All smoke and configuration validation checks passed!"
           EOF
           echo "::endgroup::"
 
@@ -1376,95 +1420,13 @@ jobs:
           fi
           echo "::endgroup::"
 
-      # ===========================================
-      # LLM Failover Validation (T024-T026)
-      # ===========================================
-      - name: Validate TOML syntax
+      - name: Record AI IDE follow-up
         run: |
-          echo "::group::TOML syntax validation"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-
-            # Install Python TOML validator if not present
-            if ! python3 -c "import toml" 2>/dev/null; then
-              pip3 install toml 2>/dev/null || apt-get install -y python3-toml 2>/dev/null || true
-            fi
-
-            # Validate moltis.toml syntax
-            if python3 -c "import toml; toml.load('config/moltis.toml')" 2>/dev/null; then
-              echo "::notice::moltis.toml syntax is valid"
-            else
-              echo "::warning::TOML validation failed - checking with basic parser"
-              # Fallback: basic syntax check
-              if grep -E '^\s*\[.*\]\s*$' config/moltis.toml > /dev/null; then
-                echo "Basic TOML structure looks OK"
-              fi
-            fi
-          EOF
-          echo "::endgroup::"
-
-      - name: Validate Ollama configuration
-        run: |
-          echo "::group::Ollama configuration validation"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-
-            # Check if Ollama is configured in docker-compose.prod.yml
-            if grep -q 'ollama:' docker-compose.prod.yml; then
-              echo "Ollama service found in docker-compose.prod.yml"
-
-              # Check if Ollama container is running
-              if docker ps --filter "name=ollama" --filter "status=running" | grep -q ollama; then
-                echo "::notice::Ollama container is running"
-
-                # Check Ollama health
-                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:11434/api/tags 2>/dev/null || echo "000")
-                if [ "$HTTP_CODE" = "200" ]; then
-                  echo "::notice::Ollama API is responding (HTTP 200)"
-                else
-                  echo "::warning::Ollama API returned HTTP $HTTP_CODE (may be starting)"
-                fi
-              else
-                echo "::warning::Ollama container is not running (may be intentional)"
-              fi
-            else
-              echo "::notice::Ollama service not configured in docker-compose.prod.yml"
-            fi
-          EOF
-          echo "::endgroup::"
-
-      - name: Validate failover configuration
-        run: |
-          echo "::group::Failover configuration validation"
-          ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            set -e
-            cd ${{ env.DEPLOY_PATH }}
-
-            # Check failover is enabled in moltis.toml
-            if grep -A5 '^\[failover\]' config/moltis.toml | grep -q 'enabled.*=.*true'; then
-              echo "::notice::Failover is enabled in moltis.toml"
-
-              # Check fallback models are configured
-              if grep -A10 '^\[failover\]' config/moltis.toml | grep -q 'fallback_models'; then
-                echo "::notice::Fallback models are configured"
-              else
-                echo "::warning::No fallback_models configured in failover section"
-              fi
-            else
-              echo "::notice::Failover is not enabled (optional feature)"
-            fi
-
-            # Check circuit breaker state file
-            if [ -f /tmp/moltis-llm-state.json ]; then
-              echo "::notice::Circuit breaker state file exists"
-              cat /tmp/moltis-llm-state.json | head -c 200
-            else
-              echo "::notice::Circuit breaker state file not found (will be created on first check)"
-            fi
-          EOF
-          echo "::endgroup::"
+          {
+            echo "## AI IDE follow-up"
+            echo "- Direct provider and LLM validation is disabled in GitHub Actions."
+            echo "- If AI behavior must be checked after deploy, perform that verification manually in AI IDE against the live environment."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Get deployment info
         id: info
@@ -1491,7 +1453,7 @@ jobs:
 
           echo "## Verification Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All smoke tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "All smoke and configuration validation checks passed successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Container Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Image**: \`${{ steps.info.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY

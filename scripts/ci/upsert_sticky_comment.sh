@@ -87,8 +87,8 @@ trap cleanup EXIT
 jq -n --rawfile body "$BODY_FILE" '{body: $body}' > "$body_json"
 
 existing_id="$(
-    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=100" --paginate \
-        --jq ".[] | select((.body // \"\") | contains(\"$MARKER\")) | .id" 2>/dev/null \
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=100" --paginate 2>/dev/null \
+        | jq -r --arg marker "$MARKER" '.[] | select((.body // "") | contains($marker)) | .id' \
         | tail -n 1 || true
 )"
 
