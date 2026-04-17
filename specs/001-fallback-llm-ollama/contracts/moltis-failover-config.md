@@ -19,30 +19,13 @@ model = "gpt-5.4"
 alias = "openai-codex"
 models = ["gpt-5.4"]
 
-# Fallback provider 1 (Ollama sidecar)
+# Fallback provider (Ollama Cloud)
 [providers.ollama]
 enabled = true
 base_url = "http://ollama:11434"
 model = "gemini-3-flash-preview:cloud"
 alias = "ollama"
 api_key = "${OLLAMA_API_KEY}"
-
-# Fallback provider 2 (Claude)
-[providers.anthropic]
-enabled = true
-api_key = "${ANTHROPIC_API_KEY}"
-model = "claude-sonnet-4-20250514"
-base_url = "https://api.anthropic.com"
-alias = "anthropic"
-
-# Final fallback provider 3 (official BigModel GLM)
-[providers.openai]
-enabled = true
-api_key = "${GLM_API_KEY}"
-model = "glm-5.1"
-base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
-alias = "glm"
-models = ["glm-5.1"]
 ```
 
 ### Failover Configuration
@@ -51,9 +34,7 @@ models = ["glm-5.1"]
 [failover]
 enabled = true
 fallback_models = [
-    "ollama::gemini-3-flash-preview:cloud",
-    "anthropic::claude-sonnet-4-20250514",
-    "glm::glm-5.1"
+    "ollama::gemini-3-flash-preview:cloud"
 ]
 health_check_interval = "5s"                        # Health check interval
 failure_threshold = 3                               # Failures before switch
@@ -69,12 +50,6 @@ success_threshold = 2                               # Successes to recover
 |---------|-------|------|----------|---------|
 | providers.openai-codex | enabled | bool | ✅ | false |
 | providers.openai-codex | model | string | ✅ | - |
-| providers.openai | enabled | bool | ✅ | false |
-| providers.openai | api_key | string | ✅ | - |
-| providers.openai | model | string | ✅ | - |
-| providers.anthropic | enabled | bool | ✅ | false |
-| providers.anthropic | api_key | string | ✅ | - |
-| providers.anthropic | model | string | ✅ | - |
 | providers.ollama | enabled | bool | ✅ | false |
 | providers.ollama | base_url | string | ✅ | - |
 | failover | enabled | bool | ✅ | false |
@@ -97,12 +72,6 @@ model = "gpt-5.4"
 alias = "openai-codex"
 models = ["gpt-5.4"]
 
-[providers.anthropic]
-enabled = false
-
-[providers.openai]
-enabled = false
-
 [providers.ollama]
 enabled = false
 
@@ -111,28 +80,13 @@ enabled = false
 fallback_models = []
 ```
 
-### Full (Codex + ordered fallback chain)
+### Full (Codex + Ollama fallback chain)
 ```toml
 [providers.openai-codex]
 enabled = true
 model = "gpt-5.4"
 alias = "openai-codex"
 models = ["gpt-5.4"]
-
-[providers.anthropic]
-enabled = true
-api_key = "${ANTHROPIC_API_KEY}"
-model = "claude-sonnet-4-20250514"
-base_url = "https://api.anthropic.com"
-alias = "anthropic"
-
-[providers.openai]
-enabled = true
-api_key = "${GLM_API_KEY}"
-model = "glm-5.1"
-base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
-alias = "glm"
-models = ["glm-5.1"]
 
 [providers.ollama]
 enabled = true
@@ -144,9 +98,7 @@ api_key = "${OLLAMA_API_KEY}"
 [failover]
 enabled = true
 fallback_models = [
-    "ollama::gemini-3-flash-preview:cloud",
-    "anthropic::claude-sonnet-4-20250514",
-    "glm::glm-5.1"
+    "ollama::gemini-3-flash-preview:cloud"
 ]
 health_check_interval = "5s"
 failure_threshold = 3
@@ -187,14 +139,10 @@ fi
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| GLM_API_KEY | ✅ | Official BigModel API key for final GLM fallback |
-| ANTHROPIC_API_KEY | ⚠️ | Claude Sonnet fallback lane |
 | OLLAMA_API_KEY | ⚠️ | Ollama cloud API key (if using cloud models) |
 
 ## Secrets Files
 
 | File | Content | Permissions |
 |------|---------|-------------|
-| secrets/glm_api_key.txt | GLM API key | 600 |
-| secrets/anthropic_api_key.txt | Anthropic API key | 600 |
 | secrets/ollama_api_key.txt | Ollama API key | 600 |

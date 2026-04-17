@@ -318,7 +318,7 @@ NODE
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
-const badReply = "model 'glm::glm-5.1' not found. available: [\"openai-codex::gpt-5.4\",\"ollama::gemini-3-flash-preview:cloud\",\"anthropic::claude-sonnet-4-20250514\"]";
+const badReply = "model 'glm::glm-5.1' not found. available: [\"openai-codex::gpt-5.4\",\"ollama::gemini-3-flash-preview:cloud\"]";
 const goodReply = "Статус: Online | Модель: openai-codex::gpt-5.4";
 if (!isReplyErrorSignature(badReply)) {
   throw new Error("expected model-not-found reply to be treated as error signature");

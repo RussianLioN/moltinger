@@ -27,11 +27,9 @@ Research completed via deep documentation analysis from https://docs.moltis.org/
 
 ### 2. LLM Provider Chain
 
-**Decision**: Primary `openai-codex::gpt-5.4` with ordered fallback `ollama -> anthropic -> glm::glm-5.1`
+**Decision**: Primary `openai-codex::gpt-5.4` with single ordered fallback `ollama`
 
-**Rationale**: Moltis should keep Codex as the preferred coding model while preserving an explicit failover chain. Legacy Z.ai API-key usage is no longer acceptable outside IDE-only coding flows, so GLM remains only as the final fallback via the official BigModel endpoint.
-
-**Final GLM Endpoint**: `https://open.bigmodel.cn/api/coding/paas/v4`
+**Rationale**: Moltis should keep Codex as the preferred coding model while preserving one explicit failover lane through Ollama Cloud. Legacy Z.ai API-key usage is no longer acceptable outside IDE-only coding flows, and the tracked runtime/deploy contract no longer activates Anthropic or GLM fallback lanes.
 
 **Configuration**:
 ```toml
@@ -40,28 +38,19 @@ enabled = true
 
 [providers.ollama]
 enabled = true
-
-[providers.anthropic]
-enabled = true
-
-[providers.openai]
-enabled = true
-alias = "glm"
-base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
-model = "glm-5.1"
-models = ["glm-5.1"]
+model = "gemini-3-flash-preview:cloud"
+alias = "ollama"
+api_key = "${OLLAMA_API_KEY}"
 
 [failover]
 fallback_models = [
   "ollama::gemini-3-flash-preview:cloud",
-  "anthropic::claude-sonnet-4-20250514",
-  "glm::glm-5.1",
 ]
 ```
 
 **Alternatives Considered**:
 - Z.ai Coding API keys — rejected: provider policy no longer allows non-IDE API-key usage without account risk
-- GLM as primary provider — rejected: operational policy now reserves GLM for final fallback only
+- Anthropic or GLM active fallback lanes — rejected: current operator policy leaves only Ollama Cloud as the tracked fallback surface
 - Local-only LLM — rejected: hardware constraints and weaker coding quality for the primary lane
 
 ---

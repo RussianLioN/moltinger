@@ -17,7 +17,6 @@ export PROMETHEUS_METRICS_FILE="$PROM_FILE"
 export CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
 export PRIMARY_PROVIDER="openai-codex"
 export FALLBACK_PROVIDER="ollama"
-export GLM_API_KEY="fixture-glm"
 export OLLAMA_HOST="http://127.0.0.1:11434"
 
 # shellcheck source=scripts/health-monitor.sh

@@ -1,4 +1,4 @@
-# Tasks: Fallback LLM with Ollama Sidecar
+# Tasks: Fallback LLM with Ollama Cloud
 
 **Input**: Design documents from `/specs/001-fallback-llm-ollama/`
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
@@ -79,17 +79,17 @@
 
 ---
 
-## Phase 3: User Story 1 - Automatic Failover on GLM Outage (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Automatic Failover on Primary Outage (Priority: P1) 🎯 MVP
 
-**Goal**: System automatically switches to Ollama when GLM API is unavailable
+**Goal**: System automatically switches to Ollama when the primary Codex lane is unavailable
 
-**Independent Test**: Simulate GLM API unavailability and verify requests go to Ollama
+**Independent Test**: Simulate primary Codex lane unavailability and verify requests go to Ollama
 
 ### Implementation for User Story 1
 
 - [X] T009 [P] [US1] Create scripts/ollama-health.sh for Ollama health checks
   → Artifacts: [scripts/ollama-health.sh](/scripts/ollama-health.sh)
-- [X] T010 [P] [US1] Add GLM health check function to scripts/health-monitor.sh
+- [X] T010 [P] [US1] Add primary-provider health check function to scripts/health-monitor.sh
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
 - [X] T011 [US1] Implement circuit breaker state machine in scripts/health-monitor.sh (CLOSED → OPEN → HALF-OPEN)
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
@@ -102,7 +102,7 @@
 - [X] T015 [US1] Add graceful recovery logic (half-open state testing) to scripts/health-monitor.sh
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
 
-**Checkpoint**: Circuit breaker automatically switches GLM → Ollama on 3 consecutive failures
+**Checkpoint**: Circuit breaker automatically switches OpenAI Codex → Ollama on 3 consecutive failures
 
 ---
 
@@ -122,12 +122,12 @@
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
 - [X] T019 [US2] Add circuit breaker state metric (moltis_circuit_state) to scripts/health-monitor.sh
   → Artifacts: [scripts/health-monitor.sh](/scripts/health-monitor.sh)
-- [X] T020 [US2] Add Prometheus alert rules for GLM API unavailability in config/prometheus/alerts.yml
+- [X] T020 [US2] Add Prometheus alert rules for primary-provider unavailability in config/prometheus/alerts.yml
   → Artifacts: [config/prometheus/alert-rules.yml](/config/prometheus/alert-rules.yml)
 - [X] T021 [US2] Add AlertManager notification config for failover events in config/alertmanager/alertmanager.yml
   → Artifacts: [config/alertmanager/alertmanager.yml](/config/alertmanager/alertmanager.yml)
 
-**Checkpoint**: Metrics visible in Prometheus, alerts trigger on GLM outage
+**Checkpoint**: Metrics visible in Prometheus, alerts trigger on primary outage
 
 ---
 
@@ -226,7 +226,7 @@ Task: "Create secrets/ollama_api_key.txt placeholder"
 ```bash
 # Can run in parallel (different files):
 Task: "Create scripts/ollama-health.sh"
-Task: "Add GLM health check to scripts/health-monitor.sh"
+Task: "Add primary-provider health check to scripts/health-monitor.sh"
 ```
 
 ---

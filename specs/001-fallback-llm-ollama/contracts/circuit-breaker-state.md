@@ -17,7 +17,7 @@ JSON schema for circuit breaker state file at `/tmp/moltis-llm-state.json`.
   "properties": {
     "current_provider": {
       "type": "string",
-      "enum": ["glm", "ollama"],
+      "enum": ["openai-codex", "ollama"],
       "description": "Currently active LLM provider"
     },
     "circuit_state": {
@@ -67,10 +67,10 @@ JSON schema for circuit breaker state file at `/tmp/moltis-llm-state.json`.
 
 ## Example States
 
-### Normal Operation (GLM active)
+### Normal Operation (OpenAI Codex active)
 ```json
 {
-  "current_provider": "glm",
+  "current_provider": "openai-codex",
   "circuit_state": "closed",
   "failure_count": 0,
   "success_count": null,
@@ -82,7 +82,7 @@ JSON schema for circuit breaker state file at `/tmp/moltis-llm-state.json`.
 }
 ```
 
-### GLM Failed, Ollama Active
+### Primary Failed, Ollama Active
 ```json
 {
   "current_provider": "ollama",
@@ -122,7 +122,7 @@ read_state() {
         cat "$state_file"
     else
         # Return default state
-        echo '{"current_provider":"glm","circuit_state":"closed","failure_count":0,"last_check":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+        echo '{"current_provider":"openai-codex","circuit_state":"closed","failure_count":0,"last_check":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
     fi
 }
 ```
@@ -154,6 +154,6 @@ write_state() {
 
 State file changes should update Prometheus metrics:
 ```
-moltis_circuit_state{provider="glm"} 0  # 0=closed
-moltis_llm_failures_total{provider="glm"} 3
+moltis_circuit_state{provider="openai-codex"} 0  # 0=closed
+moltis_llm_failures_total{provider="openai-codex"} 3
 ```

@@ -7,7 +7,7 @@ This guide covers the complete deployment process for Moltis AI assistant.
 - [x] Docker 24.x+ installed
 - [x] Traefik 3.x deployed with Let's Encrypt
 - [x] DNS: ainetic.tech pointing to server IP
-- [x] GLM API key from Zhipu AI
+- [x] OpenAI Codex OAuth runtime already bootstrapped on the target host
 
 ## Quick Deploy
 
@@ -19,7 +19,7 @@ cd moltinger
 # 2. Create environment file
 cat > .env << EOF
 MOLTIS_PASSWORD=your-secure-password
-GLM_API_KEY=your-glm-api-key
+OLLAMA_API_KEY=your-ollama-cloud-key
 EOF
 
 # 3. Create directories
@@ -55,17 +55,18 @@ Located at repository root. Contains:
 ### config/moltis.toml
 
 Moltis configuration. Key settings:
-- GLM provider endpoint
+- OpenAI Codex primary model via OAuth runtime state
+- Optional Ollama Cloud fallback lane
 - Sandbox configuration
 - Authentication settings
 
 ### config/provider_keys.json
 
-API keys for LLM providers. Created automatically on first run or manually:
+Runtime credential store for provider integrations. Created automatically on first run or during OAuth/bootstrap:
 
 ```json
 {
-  "glm-coding": "your-glm-api-key"
+  "openai-codex": "oauth-managed-runtime-state"
 }
 ```
 
@@ -165,7 +166,7 @@ tail -f /var/log/moltis-backup.log
 ## Security Checklist
 
 - [ ] MOLTIS_PASSWORD set to strong password
-- [ ] GLM_API_KEY stored in .env (not committed)
+- [ ] OLLAMA_API_KEY stored in .env when Ollama Cloud fallback is required
 - [ ] config/provider_keys.json gitignored
 - [ ] TLS certificate valid (check SSL Labs)
 - [ ] Rate limiting active (5 attempts/60s)
@@ -173,7 +174,7 @@ tail -f /var/log/moltis-backup.log
 
 ## Next Steps
 
-1. Configure GLM provider in Web UI
+1. Confirm Codex OAuth session and optional Ollama Cloud fallback in Web UI
 2. Test sandbox execution with simple command
 3. Set up monitoring for /health endpoint
 4. Document any custom configurations
