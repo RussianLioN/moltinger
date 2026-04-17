@@ -47,7 +47,7 @@ run_component_telegram_safe_llm_guard_tests() {
     local before_llm_output
     before_llm_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeLLMCall","data":{"session_key":"session:abc","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ты можешь сейчас изучить полностью официальную инструкцию на Moltis и пошагово научить меня создавать новый навык на примере?"}],"tool_count":37,"iteration":1}}'
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abc","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ты можешь сейчас изучить полностью официальную инструкцию на Moltis и пошагово научить меня создавать новый навык на примере?"}],"tool_count":37,"iteration":1}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_output" && \
@@ -67,7 +67,7 @@ run_component_telegram_safe_llm_guard_tests() {
     local before_llm_no_tool_count_output
     before_llm_no_tool_count_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeLLMCall","data":{"session_key":"session:abd","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"iteration":1}}'
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abd","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"iteration":1}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_tool_count_output" && \
@@ -88,7 +88,7 @@ run_component_telegram_safe_llm_guard_tests() {
             MOLTIS_RUNTIME_SKILLS_ROOT="$before_llm_skill_turn_root" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abg","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abg","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
@@ -109,7 +109,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abv","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abv","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_output" && \
@@ -129,7 +129,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abvh","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"},{"role":"assistant","content":"Опиши навык подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abvh","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Давай создадим навык codex-update-new"},{"role":"assistant","content":"Опиши навык подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_visibility_history_output" && \
@@ -151,7 +151,7 @@ EOF
             MOLTIS_RUNTIME_SKILLS_ROOT="$before_llm_skill_create_history_root" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abgi","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"},{"role":"assistant","content":"Навыки (2): codex-update, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abgi","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"},{"role":"assistant","content":"Навыки (2): codex-update, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_create_history_output" && \
@@ -208,7 +208,7 @@ EOF
     before_llm_skill_apply_output="$(
         env PATH="$MINIMAL_PATH" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:skill-apply-hard","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай применим навык codex-update"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:skill-apply-hard","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай применим навык codex-update"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_apply_output" && \
@@ -267,7 +267,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_status_send_script" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_status_stdout" 2>"$fastpath_status_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:faststatus","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:faststatus","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_status_status=$?
     set -e
@@ -981,7 +981,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_visibility_stdout" 2>"$fastpath_visibility_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fastvis","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastvis","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_visibility_status=$?
     set -e
@@ -1021,7 +1021,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_template_send_script" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_template_stdout" 2>"$fastpath_template_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fasttemplate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Сначала покажу шаблон навыка."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fasttemplate","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Сначала покажу шаблон навыка."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_template_status=$?
     set -e
@@ -1088,7 +1088,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_send_script" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_skill_detail_stdout" 2>"$fastpath_skill_detail_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_skill_detail_status=$?
     set -e
@@ -1143,7 +1143,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_armfail_send_script" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_skill_detail_armfail_stdout" 2>"$fastpath_skill_detail_armfail_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail-armfail","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastdetail-armfail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Расскажи мне про навык telegram-lerner"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_skill_detail_armfail_status=$?
     set -e
@@ -1381,7 +1381,7 @@ EOF
         MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_runtime_skills_root" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
         bash "$HOOK_HANDLER" >"$fastpath_create_stdout" 2>"$fastpath_create_stderr" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:fastcreate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык codex-update-new-fastpath"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastcreate","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык codex-update-new-fastpath"}],"tool_count":37,"iteration":1}}
 EOF
     fastpath_create_status=$?
     set -e
@@ -1409,7 +1409,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$direct_fastpath_tool_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeToolCall","session_key":"session:fastcreate","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"create_skill","arguments":{"name":"codex-update-new-fastpath"}}
+{"event":"BeforeToolCall","session_key":"session:fastcreate","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"create_skill","arguments":{"name":"codex-update-new-fastpath"}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$direct_fastpath_tool_output" && \
@@ -1937,7 +1937,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_direct_fastpath_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:plain-followup","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Привет"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:plain-followup","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Привет"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_direct_fastpath_output" && \
@@ -1975,7 +1975,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_status_template_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:template-followup","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:template-followup","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     stale_status_template_intent="$(cat "$stale_status_template_dir/session_template-followup.intent" 2>/dev/null || true)"
@@ -1995,7 +1995,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_visibility_template_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:template-after-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis\n<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:template-after-visibility","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis\n<available_skills>\n- codex-update\n</available_skills>"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"У тебя должен быть темплейт"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     stale_visibility_template_intent="$(cat "$stale_visibility_template_dir/session_template-after-visibility.intent" 2>/dev/null || true)"
@@ -2017,7 +2017,7 @@ EOF
             MOLTIS_RUNTIME_SKILLS_ROOT="$stale_visibility_create_dir/runtime" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_visibility_create_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:create-after-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new-from-stale"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:create-after-visibility","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Навыки (3): codex-update, post-close-task-classifier, telegram-learner."},{"role":"user","content":"Создай навык codex-update-new-from-stale"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     stale_visibility_create_intent="$(cat "$stale_visibility_create_dir/session_create-after-visibility.intent" 2>/dev/null || true)"
@@ -2120,7 +2120,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:abgj","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Окей, создаём `codex-update-new`. Мне нужны детали: описание, тело инструкций и разрешённые инструменты. Что должен делать этот навык?"},{"role":"user","content":"Следить за версиями Codex CLI и уведомлять пользователя о новых релизах."}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:abgj","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Окей, создаём `codex-update-new`. Мне нужны детали: описание, тело инструкций и разрешённые инструменты. Что должен делать этот навык?"},{"role":"user","content":"Следить за версиями Codex CLI и уведомлять пользователя о новых релизах."}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_followup_output" && \
@@ -2138,7 +2138,7 @@ EOF
     local before_llm_existing_guard_output
     before_llm_existing_guard_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeLLMCall","data":{"session_key":"session:abf","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"system","content":"Telegram-safe long-research guard: stale copy"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"tool_count":37,"iteration":2}}'
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abf","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"system","content":"Telegram-safe long-research guard: stale copy"},{"role":"user","content":"Изучи полностью официальную документацию Moltis и научи меня делать новый навык"}],"tool_count":37,"iteration":2}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_existing_guard_output" && \
@@ -2154,7 +2154,7 @@ EOF
     local before_llm_general_output
     before_llm_general_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeLLMCall","data":{"session_key":"session:abe","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ответь кратко, что умеет этот бот."}],"tool_count":37,"iteration":1}}'
+            '{"event":"BeforeLLMCall","data":{"session_key":"session:abe","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Ответь кратко, что умеет этот бот."}],"tool_count":37,"iteration":1}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_general_output" && \
@@ -2172,7 +2172,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeToolCall","data":{"session_key":"session:tool","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"exec","arguments":{"command":"ls -la ~/.moltis/skills/"}}}
+{"event":"BeforeToolCall","data":{"session_key":"session:tool","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"exec","arguments":{"command":"ls -la ~/.moltis/skills/"}}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_exec_output" && \
@@ -2191,7 +2191,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeToolCall","data":{"session_key":"session:toolq","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"exec","arguments":{"command":"bash -lc \"ls -la ~/.moltis/skills/\""}}}
+{"event":"BeforeToolCall","data":{"session_key":"session:toolq","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"exec","arguments":{"command":"bash -lc \"ls -la ~/.moltis/skills/\""}}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_quoted_exec_output" && \
@@ -2210,7 +2210,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_tool_intent_dir" \
         MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
         bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
-{"event":"BeforeLLMCall","data":{"session_key":"session:tooltop","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:tooltop","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     before_tool_top_level_output="$(
         env PATH="$MINIMAL_PATH" \
@@ -2237,7 +2237,7 @@ EOF
     env PATH="$MINIMAL_PATH" \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$top_level_status_intent_dir" \
         bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
-{"event":"BeforeLLMCall","data":{"session_key":"session:toolstatus","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:toolstatus","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"/status"}],"tool_count":37,"iteration":1}}
 EOF
     before_tool_status_output="$(
         env PATH="$MINIMAL_PATH" \
@@ -2262,7 +2262,7 @@ EOF
     local before_tool_create_output
     before_tool_create_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeToolCall","data":{"session_key":"session:tool2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","tool":"create_skill","arguments":{"name":"codex-update-new"}}}'
+            '{"event":"BeforeToolCall","data":{"session_key":"session:tool2","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"create_skill","arguments":{"name":"codex-update-new"}}}'
     )"
     if [[ -z "$before_tool_create_output" ]]; then
         test_pass
@@ -2285,6 +2285,22 @@ EOF
         test_pass
     else
         test_fail "BeforeToolCall guard must fail closed on disallowed browser-style tools while keeping the safe-lane note aligned with the Tavily passthrough contract"
+    fi
+
+    test_start "component_before_tool_guard_suppresses_non_telegram_malformed_known_tools"
+    local before_tool_non_telegram_malformed_output
+    before_tool_non_telegram_malformed_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:nontelegram-tool-malformed","provider":"glm","model":"glm::glm-5.1","tool":"exec","arguments":{"cmd":"cat /home/moltis/.moltis/skills/codex-update/SKILL.md"}}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
+       jq -e '.data.session_key == "session:nontelegram-tool-malformed"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
+       jq -e '.data.arguments.command == "true"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must rewrite malformed known-tool calls into a harmless exec no-op outside Telegram-safe lane as well"
     fi
 
     test_start "component_before_tool_guard_allows_tavily_passthrough_in_safe_lane"
@@ -2358,13 +2374,13 @@ EOF
     local after_status_output
     after_status_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:ghi","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"**Статус системы**\nПроцессы в tmux: нет\nМодель: zai::glm-5","tool_calls":[{"name":"process","arguments":{"action":"list"}},{"name":"cron","arguments":{"action":"list"}}]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:ghi","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"**Статус системы**\nПроцессы в tmux: нет\nМодель: openai-codex::gpt-5.4","tool_calls":[{"name":"process","arguments":{"action":"list"}},{"name":"cron","arguments":{"action":"list"}}]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_status_output" && \
        jq -e '.data.text == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' >/dev/null 2>&1 <<<"$after_status_output" && \
-       jq -e '.data.provider == "custom-zai-telegram-safe"' >/dev/null 2>&1 <<<"$after_status_output" && \
-       jq -e '.data.model == "custom-zai-telegram-safe::glm-5"' >/dev/null 2>&1 <<<"$after_status_output"; then
+       jq -e '.data.provider == "openai-codex"' >/dev/null 2>&1 <<<"$after_status_output" && \
+       jq -e '.data.model == "openai-codex::gpt-5.4"' >/dev/null 2>&1 <<<"$after_status_output"; then
         test_pass
     else
         test_fail "AfterLLMCall guard must replace Telegram-safe status tool fallbacks with a canonical safe-text status reply without depending on jq in the runtime container"
@@ -2374,7 +2390,7 @@ EOF
     local after_general_output
     after_general_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:jkl","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Сейчас проверю через browser и cron.","tool_calls":[{"name":"browser","arguments":{"action":"navigate"}}]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:jkl","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Сейчас проверю через browser и cron.","tool_calls":[{"name":"browser","arguments":{"action":"navigate"}}]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_general_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_general_output" && \
@@ -2385,13 +2401,28 @@ EOF
         test_fail "AfterLLMCall guard must suppress general Telegram-safe tool fallbacks and replace them with a clean user-facing fallback"
     fi
 
+    test_start "component_after_llm_guard_fail_closes_non_telegram_missing_required_argument_tool_calls"
+    local after_non_telegram_malformed_output
+    after_non_telegram_malformed_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"AfterLLMCall","data":{"session_key":"session:nontelegram-malformed","provider":"glm","model":"glm::glm-5.1","text":"Сейчас проверю память и потом покажу лог ошибки.","tool_calls":[{"name":"memory_search","arguments":{}}]}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output" && \
+       jq -e '.data.text | contains("Внутренний tool-path сформировал некорректный вызов")' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output" && \
+       jq -e '.data.text | contains("не показываю сырые tool-ошибки")' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed for non-Telegram malformed known-tool calls so web/UI lanes never surface raw missing-parameter cards"
+    fi
+
     test_start "component_after_llm_guard_rewrites_generic_skill_count_reply_to_deterministic_runtime_skill_list"
     local after_skill_visibility_output
     after_skill_visibility_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skillvis","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"У меня 3 навыка. Ты спрашиваешь третий раз. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skillvis","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"У меня 3 навыка. Ты спрашиваешь третий раз. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_output" && \
@@ -2408,7 +2439,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skillvish","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"У меня 3 навыка. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Опиши его подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skillvish","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"У меня 3 навыка. Что ты хочешь сделать?","tool_calls":[],"messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык codex-update-new"},{"role":"assistant","content":"Опиши его подробнее."},{"role":"user","content":"А что у тебя с навыками/skills?"}]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_history_output" && \
@@ -2425,7 +2456,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skillstop","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка в конфиге, файлов нет в sandbox. Стоп.","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skillstop","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"3 навыка в конфиге, файлов нет в sandbox. Стоп.","tool_calls":[]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_stop_output" && \
@@ -2442,7 +2473,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skillnofiles","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка в конфиге. Файлов нет. Хочешь создать — дай инструкцию.","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skillnofiles","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"3 навыка в конфиге. Файлов нет. Хочешь создать — дай инструкцию.","tool_calls":[]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_no_files_output" && \
@@ -2460,14 +2491,14 @@ EOF
         MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_dir" \
         bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
-{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     after_skill_visibility_persisted_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_dir" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skillpersist-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка. Создать новый?","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skillpersist-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"3 навыка. Создать новый?","tool_calls":[]}}
 EOF
     )"
     rm -rf "$persisted_intent_dir"
@@ -2488,7 +2519,7 @@ EOF
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$stale_status_visibility_dir" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:status-visibility","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: custom-zai-telegram-safe::glm-5\nПровайдер: custom-zai-telegram-safe\nРежим: safe-text"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"text":"**Навыки: 4 в конфиге, файлов нет в sandbox.** Ты 12-й раз спрашиваешь.","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:status-visibility","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"assistant","content":"Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"text":"**Навыки: 4 в конфиге, файлов нет в sandbox.** Ты 12-й раз спрашиваешь.","tool_calls":[]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_from_status_output" && \
@@ -2503,7 +2534,7 @@ EOF
     local after_skill_tool_output
     after_skill_tool_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:skilltool","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Пользователь просит создать навык. У меня есть доступ к create_skill. Сначала найду шаблон.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}}]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:skilltool","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Пользователь просит создать навык. У меня есть доступ к create_skill. Сначала найду шаблон.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}}]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_tool_output" && \
        jq -e '.data.tool_calls[0].name == "create_skill"' >/dev/null 2>&1 <<<"$after_skill_tool_output" && \
@@ -2557,7 +2588,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:skilltoolstop","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"3 навыка в конфиге, файлов нет в sandbox. Стоп.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}}]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:skilltoolstop","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"3 навыка в конфиге, файлов нет в sandbox. Стоп.","tool_calls":[{"name":"create_skill","arguments":{"name":"codex-update-new"}}]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_tool_stop_output" && \
@@ -2573,7 +2604,7 @@ EOF
     local after_skill_false_negative_output
     after_skill_false_negative_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:false","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"По факту: папки /home/moltis/.moltis/skills/ не существует. Навыки либо были удалены, либо ещё не созданы.","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:false","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"По факту: папки /home/moltis/.moltis/skills/ не существует. Навыки либо были удалены, либо ещё не созданы.","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_false_negative_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_false_negative_output" && \
@@ -2599,7 +2630,7 @@ EOF
     after_general_stdout_file="$(mktemp)"
     after_general_stderr_file="$(mktemp)"
     printf '%s\n' \
-        '{"event":"AfterLLMCall","data":{"session_key":"session:jkm","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Начинаю прямо сейчас. Сначала найду официальную документацию Moltis и изучу существующий навык `codex-update`:","tool_calls":[]}}' \
+        '{"event":"AfterLLMCall","data":{"session_key":"session:jkm","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Хорошо, Сергей! Начинаю прямо сейчас. Сначала найду официальную документацию Moltis и изучу существующий навык `codex-update`:","tool_calls":[]}}' \
         | env PATH="$MINIMAL_PATH" bash "$HOOK_SCRIPT" >"$after_general_stdout_file" 2>"$after_general_stderr_file"
     after_general_output_clean="$(cat "$after_general_stdout_file")"
     after_general_stderr="$(cat "$after_general_stderr_file")"
@@ -2616,7 +2647,7 @@ EOF
     local telemetry_only_output
     telemetry_only_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:pqr","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills` • 🧠 Searching memory...","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:pqr","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"📋 Activity log • 💻 Running: `find /home/moltis/.moltis/skills` • 🧠 Searching memory...","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$telemetry_only_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$telemetry_only_output" && \
@@ -2630,7 +2661,7 @@ EOF
     local tool_intent_output
     tool_intent_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qrs","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"No remote nodes available. Let me check the available skills and search the Moltis documentation for you.","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qrs","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"No remote nodes available. Let me check the available skills and search the Moltis documentation for you.","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$tool_intent_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$tool_intent_output" && \
@@ -2644,7 +2675,7 @@ EOF
     local observed_long_research_output
     observed_long_research_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qst","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Нашёл официальную документацию Moltis. Давай изучу её полностью:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qst","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Нашёл официальную документацию Moltis. Давай изучу её полностью:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$observed_long_research_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$observed_long_research_output" && \
@@ -2658,7 +2689,7 @@ EOF
     local mounted_workspace_output
     mounted_workspace_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsu","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Попробую найти навыки через mounted workspace:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsu","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Попробую найти навыки через mounted workspace:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$mounted_workspace_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$mounted_workspace_output" && \
@@ -2672,7 +2703,7 @@ EOF
     local template_probe_output
     template_probe_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо! Давай найду темплейт навыка и структуру. Смотрю в директории skills:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Хорошо! Давай найду темплейт навыка и структуру. Смотрю в директории skills:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$template_probe_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$template_probe_output" && \
@@ -2686,7 +2717,7 @@ EOF
     local short_template_probe_output
     short_template_probe_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Поищу темплейт в системе:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz2","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Поищу темплейт в системе:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$short_template_probe_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$short_template_probe_output" && \
@@ -2700,7 +2731,7 @@ EOF
     local short_template_searching_output
     short_template_searching_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz3","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Ищу темплейт:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz3","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Ищу темплейт:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$short_template_searching_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$short_template_searching_output" && \
@@ -2714,7 +2745,7 @@ EOF
     local github_repo_fetch_output
     github_repo_fetch_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsv","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Нашёл официальный репозиторий Moltis на GitHub. Давайте получу полную документацию:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsv","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Нашёл официальный репозиторий Moltis на GitHub. Давайте получу полную документацию:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$github_repo_fetch_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$github_repo_fetch_output" && \
@@ -2728,7 +2759,7 @@ EOF
     local internal_monologue_output
     internal_monologue_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsw","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Пользователь просит изучить официальную документацию Moltis. У меня есть доступ к mcp__tavily__tavily_search, mcp__tavily__tavily_skill и create_skill. Сначала найду официальную документацию Moltis.","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsw","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Пользователь просит изучить официальную документацию Moltis. У меня есть доступ к mcp__tavily__tavily_search, mcp__tavily__tavily_skill и create_skill. Сначала найду официальную документацию Moltis.","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$internal_monologue_output" && \
@@ -2742,7 +2773,7 @@ EOF
     local live_doc_search_plan_output
     live_doc_search_plan_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsx","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, изучу документацию Moltis и существующие навыки как примеры. Начну с поиска официальной документации и анализа имеющегося навыка codex-update, который как раз занимается проверкой версий.","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsx","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Хорошо, изучу документацию Moltis и существующие навыки как примеры. Начну с поиска официальной документации и анализа имеющегося навыка codex-update, который как раз занимается проверкой версий.","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_doc_search_plan_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_doc_search_plan_output" && \
@@ -2756,7 +2787,7 @@ EOF
     local live_friendly_doc_search_plan_output
     live_friendly_doc_search_plan_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsy","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Отлично! Давай изучу официальную документацию и существующие навыки как примеры. Начну с поиска документации Moltis и анализа навыка codex-update (он как раз проверяет версии):","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsy","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Отлично! Давай изучу официальную документацию и существующие навыки как примеры. Начну с поиска документации Moltis и анализа навыка codex-update (он как раз проверяет версии):","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_friendly_doc_search_plan_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_friendly_doc_search_plan_output" && \
@@ -2770,7 +2801,7 @@ EOF
     local live_named_doc_study_output
     live_named_doc_study_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsy2","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsy2","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_named_doc_study_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_named_doc_study_output" && \
@@ -2784,7 +2815,7 @@ EOF
     local live_codex_update_reading_output
     live_codex_update_reading_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Давай наконец сделаю это! Читаю существующий навык `codex-update` как пример и найду документацию:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qsz","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Давай наконец сделаю это! Читаю существующий навык `codex-update` как пример и найду документацию:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_codex_update_reading_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_codex_update_reading_output" && \
@@ -2800,7 +2831,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:codex-update-scheduler-after","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Навык есть, но автопроверка по крону не подтверждена.","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:codex-update-scheduler-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","user_message":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?","text":"Навык есть, но автопроверка по крону не подтверждена.","tool_calls":[]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output" && \
@@ -2815,7 +2846,7 @@ EOF
     local live_named_doc_search_plan_output
     live_named_doc_search_plan_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:qt0","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:qt0","provider":"openai-codex","model":"openai-codex::gpt-5.4","text":"Хорошо, Сергей! Давай изучу официальную документацию Moltis и существующий навык `codex-update` как реальный пример. Начинаю:","tool_calls":[]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$live_named_doc_search_plan_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$live_named_doc_search_plan_output" && \
@@ -2968,7 +2999,7 @@ EOF
         MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
         MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$persisted_intent_send_dir" \
         bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
-{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-send","provider":"custom-zai-telegram-safe","model":"custom-zai-telegram-safe::glm-5","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillpersist-send","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"А что у тебя с навыками/skills?"}],"tool_count":37,"iteration":1}}
 EOF
     message_sending_skill_visibility_persisted_output="$(
         env PATH="$MINIMAL_PATH" \
@@ -3006,7 +3037,7 @@ EOF
             MOLTIS_RUNTIME_SKILLS_ROOT="$skill_detail_runtime_root" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"MessageSending","session_id":"session:skilldetail-send","data":{"account_id":"moltis-bot","to":"262872988","reply_to_message_id":959,"user_message":"Расскажи мне про навык telegram-lerner","text":"Похоже, у меня сейчас не сработало чтение файла навыка через инструмент. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/telegram-learner/SKILL.md` • ❌ missing 'command' parameter"}}"
+{"event":"MessageSending","session_id":"session:skilldetail-send","data":{"account_id":"moltis-bot","to":"262872988","reply_to_message_id":959,"user_message":"Расскажи мне про навык telegram-lerner","text":"Похоже, у меня сейчас не сработало чтение файла навыка через инструмент. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/telegram-learner/SKILL.md` • ❌ missing 'command' parameter"}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_skill_detail_output" && \
@@ -3082,7 +3113,7 @@ EOF
             MOLTIS_RUNTIME_SKILLS_ROOT="$similar_learner_dir" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,openclaw-improvement-learner,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"MessageSending","session_id":"session:similar-learner","data":{"account_id":"moltis-bot","to":"262872990","reply_to_message_id":961,"user_message":"Расскажи мне про навык openclaw-improvement-learner","text":"Сейчас скажу честно: инструмент чтения навыка опять не сработал. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/openclaw-improvement-learner/SKILL.md` • ❌ missing 'command' parameter"}}"
+{"event":"MessageSending","session_id":"session:similar-learner","data":{"account_id":"moltis-bot","to":"262872990","reply_to_message_id":961,"user_message":"Расскажи мне про навык openclaw-improvement-learner","text":"Сейчас скажу честно: инструмент чтения навыка опять не сработал. 📋 Activity log • 💻 Running: `cat /home/moltis/.moltis/skills/openclaw-improvement-learner/SKILL.md` • ❌ missing 'command' parameter"}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$message_sending_similar_learner_output" && \
@@ -3344,7 +3375,7 @@ EOF
     local non_safe_output
     non_safe_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:mno","provider":"zai","model":"zai::glm-5","text":"plain response","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:mno","provider":"glm","model":"glm::glm-5.1","text":"plain response","tool_calls":[]}}'
     )"
     if [[ -z "$non_safe_output" ]]; then
         test_pass

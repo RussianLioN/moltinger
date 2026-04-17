@@ -1288,18 +1288,18 @@
         "RESET_CHAT_CONTEXT_BEFORE_SEND"
       ]
     },
-    "zai-rate-monitor.sh": {
+    "glm-rate-monitor.sh": {
       "version": "1.0.0",
-      "description": "Monitor Z.ai Coding Plan API rate limits and output JSON for CI",
+      "description": "Monitor official BigModel Coding Plan API rate limits and output JSON for CI",
       "entrypoint": true,
       "requires": [
         "curl",
         "jq"
       ],
       "provides": [
-        "zai-rate-monitor",
-        "zai-rate-watch",
-        "zai-rate-json"
+        "glm-rate-monitor",
+        "glm-rate-watch",
+        "glm-rate-json"
       ]
     },
     "telegram-webhook-rollout.sh": {

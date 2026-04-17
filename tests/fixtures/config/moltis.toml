@@ -84,9 +84,9 @@ api_key = "${OLLAMA_API_KEY}"
 [providers.openai]
 enabled = false
 api_key = "${GLM_API_KEY}"
-model = "glm-5"
-base_url = "https://api.z.ai/api/coding/paas/v4"
-alias = "zai"
+model = "glm-5.1"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+alias = "glm"
 
 [chat]
 message_queue_mode = "followup"

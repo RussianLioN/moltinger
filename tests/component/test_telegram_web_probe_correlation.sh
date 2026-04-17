@@ -318,8 +318,8 @@ NODE
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
 const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
-const badReply = "model 'custom-zai-telegram-safe::glm-5' not found. available: [\"zai::glm-5\"]";
-const goodReply = "Статус: Online | Модель: custom-zai-telegram-safe::glm-5";
+const badReply = "model 'glm::glm-5.1' not found. available: [\"openai-codex::gpt-5.4\",\"ollama::gemini-3-flash-preview:cloud\",\"anthropic::claude-sonnet-4-20250514\"]";
+const goodReply = "Статус: Online | Модель: openai-codex::gpt-5.4";
 if (!isReplyErrorSignature(badReply)) {
   throw new Error("expected model-not-found reply to be treated as error signature");
 }
@@ -333,6 +333,30 @@ NODE
         test_fail "Model-not-found responses must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_marks_no_models_available_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "No models available.",
+  "model 'zai::glm-5-turbo' not found. available: []"
+];
+const goodReply = "Модель: openai-codex::gpt-5.4";
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected model catalog failure to be rejected: ${badReply}`);
+  }
+}
+if (isReplyErrorSignature(goodReply)) {
+  throw new Error("expected healthy model summary to remain clean");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Model catalog exhaustion replies must be rejected by reply-quality checks"
+    fi
+
     test_start "component_telegram_web_probe_marks_activity_log_replies_as_error_signature"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
@@ -342,7 +366,7 @@ const badReplies = [
   "cron list снова вернул missing 'action' parameter, memory_search — missing 'query' parameter, exec — missing 'command' parameter",
   "Timed out: Agent run timed out after 90s"
 ];
-const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: custom-zai-telegram-safe::glm-5";
+const goodReply = "Я на месте. - Имя: Молтингер - Пользователь: Сергей - Модель: openai-codex::gpt-5.4";
 for (const badReply of badReplies) {
   if (!isReplyErrorSignature(badReply)) {
     throw new Error(`expected error signature to be rejected: ${badReply}`);

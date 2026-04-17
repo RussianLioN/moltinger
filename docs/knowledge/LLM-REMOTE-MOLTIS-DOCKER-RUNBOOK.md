@@ -407,7 +407,7 @@ Fix:
 - use writable runtime config mounted at `/home/moltis/.config/moltis`
 - prepare it from static `./config` before restart
 
-### Symptom: Moltis UI still shows `glm-5` after a successful GPT-5.4 rollout
+### Symptom: Moltis UI still shows `glm-5.1` after a successful GPT-5.4 rollout
 
 Likely cause:
 

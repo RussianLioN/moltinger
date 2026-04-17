@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Z.AI Rate Limit Monitor
+# GLM Rate Limit Monitor
 # ==============================================================================
-# Мониторинг rate limits для Z.ai Coding Plan API
+# Мониторинг rate limits для официального BigModel Coding Plan API
 # Использование:
-#   ./scripts/zai-rate-monitor.sh           # Однократная проверка
-#   ./scripts/zai-rate-monitor.sh --watch   # Постоянный мониторинг
-#   ./scripts/zai-rate-monitor.sh --json    # JSON вывод для CI/CD
+#   ./scripts/glm-rate-monitor.sh           # Однократная проверка
+#   ./scripts/glm-rate-monitor.sh --watch   # Постоянный мониторинг
+#   ./scripts/glm-rate-monitor.sh --json    # JSON вывод для CI/CD
 #
 # Требования:
 #   - GLM_API_KEY в переменных окружения или ~/.config/moltis/.env
@@ -15,9 +15,9 @@
 set -euo pipefail
 
 # Конфигурация
-API_BASE="https://api.z.ai/api/coding/paas/v4"
-MODEL="glm-5"
-CACHE_FILE="/tmp/zai-rate-limit-cache.json"
+API_BASE="https://open.bigmodel.cn/api/coding/paas/v4"
+MODEL="glm-5.1"
+CACHE_FILE="/tmp/glm-rate-limit-cache.json"
 CACHE_TTL=30  # секунд
 
 # Цвета
@@ -167,7 +167,7 @@ print_human() {
     local status=$(echo "$data" | grep "^status:" | cut -d: -f2-)
 
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  Z.AI Rate Limit Monitor${NC}"
+    echo -e "${CYAN}  GLM Rate Limit Monitor${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
 

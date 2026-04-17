@@ -205,6 +205,21 @@ oauth_tokens_have_refresh_token() {
         "$oauth_tokens_file" >/dev/null 2>&1
 }
 
+provider_keys_legacy_aliases() {
+    local runtime_config_dir="$1"
+    local provider_keys_file="$runtime_config_dir/provider_keys.json"
+
+    [[ -f "$provider_keys_file" ]] || return 1
+
+    jq -r '
+        [
+          (if has("zai") then "zai" else empty end),
+          (if has("zai-telegram-safe") then "zai-telegram-safe" else empty end),
+          (if has("custom-zai-telegram-safe") then "custom-zai-telegram-safe" else empty end)
+        ] | .[]
+    ' "$provider_keys_file" 2>/dev/null
+}
+
 provider_keys_first_model_for_provider() {
     local runtime_config_dir="$1"
     local provider="$2"
@@ -374,6 +389,7 @@ emit_failure_json() {
         --arg auth_canary_succeeded "${AUTH_CANARY_SUCCEEDED:-}" \
         --arg expected_auth_model "${EXPECTED_AUTH_MODEL:-}" \
         --arg auth_provider_model_preference "${AUTH_PROVIDER_MODEL_PREFERENCE:-}" \
+        --arg legacy_runtime_provider_aliases "${LEGACY_RUNTIME_PROVIDER_ALIASES:-}" \
         '{
           status: $status,
           target: $target,
@@ -391,6 +407,11 @@ emit_failure_json() {
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             expected_auth_model: (if $expected_auth_model == "" then null else $expected_auth_model end),
             auth_provider_model_preference: (if $auth_provider_model_preference == "" then null else $auth_provider_model_preference end),
+            legacy_runtime_provider_aliases: (
+              if $legacy_runtime_provider_aliases == "" then []
+              else ($legacy_runtime_provider_aliases | split("\n") | map(select(length > 0)))
+              end
+            ),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
@@ -506,6 +527,7 @@ TRACKED_RUNTIME_TOML=""
 RUNTIME_RUNTIME_TOML=""
 EXPECTED_AUTH_MODEL=""
 AUTH_PROVIDER_MODEL_PREFERENCE=""
+LEGACY_RUNTIME_PROVIDER_ALIASES=""
 
 if [[ ! -L "$ACTIVE_PATH" ]]; then
     fail_with "ACTIVE_ROOT_NOT_SYMLINK" "Active deploy root is not a symlink: $ACTIVE_PATH"
@@ -627,6 +649,11 @@ if [[ ! -f "$TRACKED_RUNTIME_TOML" || ! -f "$RUNTIME_RUNTIME_TOML" ]]; then
 fi
 if ! cmp -s "$TRACKED_RUNTIME_TOML" "$RUNTIME_RUNTIME_TOML"; then
     fail_with "RUNTIME_CONFIG_FILE_MISMATCH" "Runtime moltis.toml diverges from tracked config/moltis.toml"
+fi
+
+LEGACY_RUNTIME_PROVIDER_ALIASES="$(provider_keys_legacy_aliases "$EXPECTED_RUNTIME_CONFIG" || true)"
+if [[ -n "$LEGACY_RUNTIME_PROVIDER_ALIASES" ]]; then
+    fail_with "LEGACY_RUNTIME_PROVIDER_ALIAS_PRESENT" "Runtime provider_keys.json still exposes removed legacy provider aliases: $(printf '%s' "$LEGACY_RUNTIME_PROVIDER_ALIASES" | paste -sd ', ' -)"
 fi
 
 if [[ -n "$EXPECTED_AUTH_PROVIDER" ]]; then
@@ -830,6 +857,7 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
         --arg auth_canary_succeeded "$AUTH_CANARY_SUCCEEDED" \
         --arg expected_auth_model "$EXPECTED_AUTH_MODEL" \
         --arg auth_provider_model_preference "$AUTH_PROVIDER_MODEL_PREFERENCE" \
+        --arg legacy_runtime_provider_aliases "$LEGACY_RUNTIME_PROVIDER_ALIASES" \
         '{
           status: $status,
           target: $target,
@@ -877,6 +905,11 @@ if [[ "$OUTPUT_JSON" == "true" ]]; then
             expected_auth_provider: (if $expected_auth_provider == "" then null else $expected_auth_provider end),
             expected_auth_model: (if $expected_auth_model == "" then null else $expected_auth_model end),
             auth_provider_model_preference: (if $auth_provider_model_preference == "" then null else $auth_provider_model_preference end),
+            legacy_runtime_provider_aliases: (
+              if $legacy_runtime_provider_aliases == "" then []
+              else ($legacy_runtime_provider_aliases | split("\n") | map(select(length > 0)))
+              end
+            ),
             auth_status_raw: (if $auth_status_raw == "" then null else $auth_status_raw end),
             auth_status_post_canary: (if $auth_status_post_canary == "" then null else $auth_status_post_canary end),
             auth_status_valid: (if $auth_status_valid == "" then null else ($auth_status_valid == "true") end),
@@ -928,5 +961,6 @@ auth_status_valid=${AUTH_STATUS_VALID:-skipped}
 auth_validation_path=${AUTH_VALIDATION_PATH:-skipped}
 auth_canary_attempted=${AUTH_CANARY_ATTEMPTED:-false}
 auth_canary_succeeded=${AUTH_CANARY_SUCCEEDED:-false}
+legacy_runtime_provider_aliases=${LEGACY_RUNTIME_PROVIDER_ALIASES:-none}
 EOF
 fi

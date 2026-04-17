@@ -216,7 +216,8 @@ timezone = "Europe/Moscow"
 offered = [
     "openai-codex",  # Primary: ChatGPT subscription OAuth
     "ollama",        # Fallback 1: Ollama cloud Gemini
-    "openai",        # Fallback 2: GLM-5 via Z.ai Coding Plan
+    "anthropic",     # Fallback 2: Claude Sonnet
+    "openai",        # Fallback 3: GLM-5.1 via official BigModel Coding Plan
 ] # Providers shown in onboarding/picker UI ([] = show all)
 # All available providers:
 #   "anthropic", "openai", "gemini", "groq", "xai", "deepseek",
@@ -226,7 +227,7 @@ offered = [
 
 # ── Anthropic (Claude) ────────────────────────────────────────
 [providers.anthropic]
-enabled = false                     # Set to true and add API key to enable
+enabled = true                      # Enabled as fallback; requires ANTHROPIC_API_KEY in runtime env
 api_key = "${ANTHROPIC_API_KEY}"    # Or set ANTHROPIC_API_KEY env var
 model = "claude-sonnet-4-20250514"  # Default model
 base_url = "https://api.anthropic.com"
@@ -240,30 +241,16 @@ alias = "openai-codex"
 models = ["gpt-5.4"]
 tool_mode = "auto"
 
-# ── OpenAI / GLM-5 via Z.ai Coding Plan ───────────────────────────────────────
-# Using Z.ai Coding Plan (Pro subscription) through OpenAI-compatible API
-# Docs: https://docs.z.ai/api-reference/introduction
-# Coding Plan endpoint: https://api.z.ai/api/coding/paas/v4
+# ── OpenAI-compatible GLM-5.1 via BigModel Coding Plan ────────────────────────
+# Official BigModel Coding Plan OpenAI-compatible endpoint:
+# https://docs.bigmodel.cn/cn/coding-plan/tool/opencode
 [providers.openai]
 enabled = true
-api_key = "${GLM_API_KEY}"                          # Use GLM_API_KEY from .env
-model = "glm-5"                                     # Default model
-base_url = "https://api.z.ai/api/coding/paas/v4"    # Coding Plan endpoint
-alias = "zai"
-models = ["glm-5"]                                  # Keep GLM-5 as third step in chain
-
-# ── Telegram-safe Z.ai lane ───────────────────────────────────────────────────
-# Keep the user-facing Telegram bot on a guarded provider surface. Dedicated
-# skill tools stay available for Telegram skill-authoring turns, while the
-# repo-managed hook blocks browser/search/filesystem drift and telemetry leaks.
-[providers.custom-zai-telegram-safe]
-enabled = true
-api_key = "${GLM_API_KEY}"
-model = "glm-5"
-base_url = "https://api.z.ai/api/coding/paas/v4"
-alias = "zai-telegram-safe"
-models = ["glm-5"]
-tool_mode = "auto"
+api_key = "${GLM_API_KEY}"                               # Official BigModel API key
+model = "glm-5.1"                                       # Default fallback model
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+alias = "glm"
+models = ["glm-5.1"]
 
 # ── GLM (Zhipu AI) - DISABLED (invalid provider name) ────────────────────────
 # This section is NOT a valid Moltis provider! Use [providers.openai] instead.
@@ -326,16 +313,18 @@ message_queue_mode = "followup"   # How to handle messages during an active agen
                                   #   "collect"  - Buffer messages, concatenate as single message
 # priority_models = ["claude-opus-4-5", "gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.4", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
-# Preferred chain: GPT-5.4 (OAuth) -> Ollama Gemini 3 Flash Preview -> GLM-5
+# Preferred chain: GPT-5.4 (OAuth) -> Ollama Gemini 3 Flash Preview -> Claude -> GLM-5.1
 allowed_models = [
-    "openai-codex::gpt-5.4",                 # Primary
-    "ollama::gemini-3-flash-preview:cloud",  # Fallback 1
-    "zai::glm-5"                             # Fallback 2
+    "openai-codex::gpt-5.4",                    # Primary
+    "ollama::gemini-3-flash-preview:cloud",     # Fallback 1
+    "anthropic::claude-sonnet-4-20250514",      # Fallback 2
+    "glm::glm-5.1"                              # Fallback 3
 ]
 priority_models = [
     "openai-codex::gpt-5.4",
     "ollama::gemini-3-flash-preview:cloud",
-    "zai::glm-5",
+    "anthropic::claude-sonnet-4-20250514",
+    "glm::glm-5.1",
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -656,12 +645,13 @@ timezone = "local"                # Timezone: "local" or IANA name like "Europe/
 
 [failover]
 enabled = true                    # Enable automatic failover
-# Fallback chain: GPT-5.4 → Ollama Gemini → GLM-5
+# Fallback chain: GPT-5.4 → Ollama Gemini → Claude → GLM-5.1
 fallback_models = [
     "ollama::gemini-3-flash-preview:cloud",  # Primary fallback: Ollama sidecar
-    "zai::glm-5"                             # Secondary fallback: GLM-5 via Z.ai
+    "anthropic::claude-sonnet-4-20250514",   # Secondary fallback: Claude
+    "glm::glm-5.1"                           # Final fallback: official BigModel GLM-5.1
 ]
-# Chain: gpt-5.4 → ollama-gemini → glm-5
+# Chain: gpt-5.4 → ollama-gemini → claude-sonnet-4 → glm-5.1
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VOICE

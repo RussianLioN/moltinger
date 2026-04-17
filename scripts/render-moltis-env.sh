@@ -60,6 +60,7 @@ if [[ -z "$OUTPUT_PATH" ]]; then
 fi
 
 assert_single_line "MOLTIS_PASSWORD" "${MOLTIS_PASSWORD:-}"
+assert_single_line "ANTHROPIC_API_KEY" "${ANTHROPIC_API_KEY:-}"
 assert_single_line "GLM_API_KEY" "${GLM_API_KEY:-}"
 assert_single_line "OLLAMA_API_KEY" "${OLLAMA_API_KEY:-}"
 assert_single_line "TAVILY_API_KEY" "${TAVILY_API_KEY:-}"
@@ -79,7 +80,10 @@ cat > "$OUTPUT_PATH" <<EOF
 # Authentication
 MOLTIS_PASSWORD=${MOLTIS_PASSWORD:-}
 
-# LLM Provider - GLM (Zhipu AI)
+# LLM Provider - Claude (Anthropic)
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+# LLM Provider - GLM (Zhipu AI / BigModel)
 GLM_API_KEY=${GLM_API_KEY:-}
 
 # LLM Fallback - Ollama Cloud (optional, for cloud models)

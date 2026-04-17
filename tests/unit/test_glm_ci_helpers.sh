@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unit tests for CI helpers used by Z.ai GitHub workflows.
+# Unit tests for CI helpers used by official GLM GitHub workflows.
 
 set -euo pipefail
 
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
-HELPER="$PROJECT_ROOT/scripts/ci/zai_chat_completion.sh"
+HELPER="$PROJECT_ROOT/scripts/ci/glm_chat_completion.sh"
 
 get_free_port() {
     python3 - <<'PY'
@@ -67,7 +67,7 @@ PY
 
 # Test 1: Missing key should fail with dedicated code.
 test_missing_glm_api_key() {
-    test_start "zai_chat_completion should fail when GLM_API_KEY is missing"
+    test_start "glm_chat_completion helper should fail when GLM_API_KEY is missing"
 
     local prompt_file output_file
     prompt_file="$(mktemp)"
@@ -89,7 +89,7 @@ test_missing_glm_api_key() {
 
 # Test 2: Successful response should be written to output file.
 test_success_response_parsing() {
-    test_start "zai_chat_completion should write content on successful response"
+    test_start "glm_chat_completion helper should write content on successful response"
 
     local prompt_file output_file port
     prompt_file="$(mktemp)"
@@ -119,7 +119,7 @@ test_success_response_parsing() {
 
 # Test 3: API non-200 should return dedicated error code.
 test_api_error_code() {
-    test_start "zai_chat_completion should return code 5 on API error"
+    test_start "glm_chat_completion helper should return code 5 on API error"
 
     local prompt_file output_file port
     prompt_file="$(mktemp)"
@@ -150,7 +150,7 @@ test_api_error_code() {
 
 # Test 4: Array content payload should be flattened safely.
 test_array_content_parsing() {
-    test_start "zai_chat_completion should flatten array-based content"
+    test_start "glm_chat_completion helper should flatten array-based content"
 
     local prompt_file output_file port output
     prompt_file="$(mktemp)"
@@ -186,7 +186,7 @@ run_all_tests() {
     if [[ "$OUTPUT_JSON" != "true" ]]; then
         echo ""
         echo "========================================="
-        echo "  Z.ai CI Helper Unit Tests"
+        echo "  GLM CI Helper Unit Tests"
         echo "========================================="
         echo ""
     fi

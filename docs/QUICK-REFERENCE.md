@@ -139,7 +139,8 @@ make logs LOGS_OPTS=-f
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
 | TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
 | OLLAMA_API_KEY | ✅/optional | Ollama Cloud first fallback |
-| GLM_API_KEY | ✅ | GLM-5 last fallback + interactive assistant workflow |
+| ANTHROPIC_API_KEY | ✅/optional | Claude fallback |
+| GLM_API_KEY | ✅ | Official BigModel GLM-5.1 last fallback + interactive assistant workflow |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
 
 Runtime-only auth state:
@@ -150,7 +151,7 @@ Runtime-only auth state:
 - re-auth only on expiry, revocation, corruption, or explicit rotation
 
 Workflow variable:
-- `AI_REVIEW_PROVIDER` (`zai` by default, `off` to disable the interactive assistant AI path)
+- Legacy compatibility kill-switch: `AI_REVIEW_PROVIDER=off`
 - PR review in GitHub Actions is deterministic-only; final review is completed manually in AI IDE
 
 ---

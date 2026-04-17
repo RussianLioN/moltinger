@@ -449,6 +449,243 @@ extract_json_object() {
     '
 }
 
+extract_json_object_field_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+
+    [[ -n "$source_text" && -n "$key" ]] || return 1
+
+    printf '%s' "$source_text" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == "seek") {
+                    if (substr(text, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "{") {
+                        continue
+                    }
+                    state = "capture"
+                    depth = 0
+                    in_string = 0
+                    escape = 0
+                    i = j - 1
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        print value
+                        exit 0
+                    }
+                }
+            }
+        }
+        END {
+            if (value == "") {
+                exit 1
+            }
+        }
+    '
+}
+
+extract_json_objects_from_array() {
+    local array_json="${1:-}"
+    local perl_output=""
+
+    [[ -n "$array_json" && "$array_json" != "[]" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$array_json" | perl -e '
+                use strict;
+                use warnings;
+                use utf8;
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
+
+                local $/;
+                my $text = <STDIN>;
+                exit 1 unless defined $text && length $text;
+
+                my $n = length($text);
+                my $capturing = 0;
+                my $depth = 0;
+                my $in_string = 0;
+                my $escape = 0;
+                my $value = q();
+
+                for (my $i = 0; $i < $n; $i++) {
+                    my $char = substr($text, $i, 1);
+
+                    if (!$capturing) {
+                        next unless $char eq q({);
+                        $capturing = 1;
+                        $depth = 1;
+                        $in_string = 0;
+                        $escape = 0;
+                        $value = q({);
+                        next;
+                    }
+
+                    $value .= $char;
+
+                    if ($escape) {
+                        $escape = 0;
+                        next;
+                    }
+                    if ($char eq q(\\)) {
+                        $escape = 1;
+                        next;
+                    }
+                    if ($char eq q(")) {
+                        $in_string = !$in_string;
+                        next;
+                    }
+                    next if $in_string;
+
+                    if ($char eq q({)) {
+                        $depth++;
+                        next;
+                    }
+                    if ($char eq q(})) {
+                        $depth--;
+                        if ($depth == 0) {
+                            print $value, qq(\n);
+                            $capturing = 0;
+                            $value = q();
+                        }
+                    }
+                }
+            ' 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s\n' "$perl_output"
+            return 0
+        fi
+    fi
+
+    printf '%s' "$array_json" | awk '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+            capturing = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (!capturing) {
+                    if (c != "{") {
+                        continue
+                    }
+                    capturing = 1
+                    depth = 1
+                    in_string = 0
+                    escape = 0
+                    value = "{"
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        print value "\n"
+                        capturing = 0
+                        value = ""
+                    }
+                }
+            }
+        }
+    '
+}
+
+string_has_nonwhitespace() {
+    local value="${1:-}"
+    [[ -n "$(printf '%s' "$value" | tr -d '[:space:]')" ]]
+}
+
+json_string_field_present_and_nonempty_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+    local value=""
+
+    value="$(extract_json_string_field_from_text "$source_text" "$key" || true)"
+    string_has_nonwhitespace "$value"
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -2980,6 +3217,29 @@ emit_modified_payload_preserve_tool_calls() {
         )"
 }
 
+tool_call_has_missing_required_arguments() {
+    local tool_name="${1:-}"
+    local arguments_json="${2:-}"
+
+    [[ -n "$tool_name" ]] || return 1
+    [[ -n "$arguments_json" ]] || arguments_json='{}'
+
+    case "$tool_name" in
+        memory_search)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "query"
+            ;;
+        exec)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "command"
+            ;;
+        cron)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 extract_tool_call_names() {
     local tool_calls_json="${1:-}"
 
@@ -3098,6 +3358,27 @@ tool_calls_only_tavily_allowlisted() {
     $saw_name
 }
 
+tool_calls_include_missing_required_arguments() {
+    local tool_calls_json="${1:-}"
+    local tool_call_json=""
+    local nested_tool_name=""
+    local nested_arguments_json=""
+
+    [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
+
+    while IFS= read -r tool_call_json; do
+        [[ -n "$tool_call_json" ]] || continue
+        nested_tool_name="$(extract_json_string_field_from_text "$tool_call_json" "name" || true)"
+        [[ -n "$nested_tool_name" ]] || continue
+        nested_arguments_json="$(extract_json_object_field_from_text "$tool_call_json" "arguments" || true)"
+        if tool_call_has_missing_required_arguments "$nested_tool_name" "${nested_arguments_json:-}"; then
+            return 0
+        fi
+    done < <(extract_json_objects_from_array "$tool_calls_json" || true)
+
+    return 1
+}
+
 emit_modified_payload() {
     local text="$1"
     local include_tool_calls="${2:-false}"
@@ -3200,6 +3481,7 @@ if [[ -z "$tool_name" ]]; then
     tool_name="$(extract_first_string tool_name || true)"
 fi
 command_arg="$(extract_first_string command || true)"
+tool_arguments_json="$(extract_json_object arguments || true)"
 messages_json="$(extract_json_array messages || true)"
 latest_user_message="$(extract_last_message_content_by_role "${messages_json:-}" user || true)"
 latest_assistant_message="$(extract_last_message_content_by_role "${messages_json:-}" assistant || true)"
@@ -3256,11 +3538,11 @@ write_audit_line "invoke event=${event:-<none>} provider=${provider:-<none>} mod
 
 is_telegram_safe_lane=false
 case "${model:-}" in
-    custom-zai-telegram-safe::*|openai-codex::*)
+    openai-codex::*)
         is_telegram_safe_lane=true
         ;;
 esac
-if [[ "${provider:-}" == "custom-zai-telegram-safe" || "${provider:-}" == "zai-telegram-safe" || "${provider:-}" == "openai-codex" ]]; then
+if [[ "${provider:-}" == "openai-codex" ]]; then
     is_telegram_safe_lane=true
 fi
 if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" ]]; then
@@ -3285,6 +3567,7 @@ if [[ -n "${tool_calls_json:-}" && "$tool_calls_json" != "[]" ]]; then
 fi
 tool_calls_allowlisted_only=false
 tool_calls_have_disallowed=false
+tool_calls_have_missing_required_arguments=false
 if [[ "$tool_calls_present" == true ]]; then
     if tool_calls_only_allowlisted "$tool_calls_json"; then
         tool_calls_allowlisted_only=true
@@ -3292,6 +3575,14 @@ if [[ "$tool_calls_present" == true ]]; then
     if tool_calls_include_disallowed "$tool_calls_json"; then
         tool_calls_have_disallowed=true
     fi
+    if tool_calls_include_missing_required_arguments "$tool_calls_json"; then
+        tool_calls_have_missing_required_arguments=true
+    fi
+fi
+
+current_tool_missing_required_arguments=false
+if [[ "$event" == "BeforeToolCall" ]] && tool_call_has_missing_required_arguments "$tool_name" "${tool_arguments_json:-}"; then
+    current_tool_missing_required_arguments=true
 fi
 
 # Keep delivery-time stripping strict, but allow broader AfterLLM fail-closed
@@ -3330,7 +3621,7 @@ fi
 
 looks_like_observed_status_reply=false
 if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && -z "$status_query_text_flat" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|активность:|канал: telegram|провайдер:|режим: safe-text|модель: (custom-zai-telegram-safe::glm-5|openai-codex::gpt-5\.4)'; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq '(^|[^[:alnum:]_])/?status([^[:alnum:]_]|$)|статус( системы)?|активность:|канал: telegram|провайдер:|режим: safe-text|модель: openai-codex::gpt-5\.4'; then
     looks_like_observed_status_reply=true
 fi
 
@@ -3552,6 +3843,12 @@ if [[ ( "$event" == "AfterLLMCall" || "$event" == "MessageSending" ) && "$tool_c
     has_skill_visibility_generic_mismatch=true
 fi
 
+non_telegram_after_llm_fail_closed=false
+if [[ "$event" == "AfterLLMCall" && "$is_telegram_safe_lane" != true ]] && \
+   [[ "$tool_calls_have_missing_required_arguments" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true || "$has_skill_visibility_generic_mismatch" == true ]]; then
+    non_telegram_after_llm_fail_closed=true
+fi
+
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
     diagnostic_preview_source="text"
     diagnostic_preview_value="$response_text_flat"
@@ -3589,6 +3886,19 @@ if [[ "$event" == "MessageSending" ]]; then
         exit 0
     fi
 elif [[ "$is_telegram_safe_lane" != true ]]; then
+    if [[ "$event" == "AfterLLMCall" && "$non_telegram_after_llm_fail_closed" == true ]]; then
+        :
+    elif [[ "$event" == "BeforeToolCall" && "$current_tool_missing_required_arguments" == true ]]; then
+        :
+    else
+        exit 0
+    fi
+fi
+
+if [[ "$event" == "BeforeToolCall" && "$current_tool_missing_required_arguments" == true ]]; then
+    synthetic_command="true"
+    write_audit_line "emit_modify event=$event reason=malformed_tool_call_suppress tool=${tool_name:-missing} telegram_safe=$is_telegram_safe_lane"
+    emit_before_tool_modified_payload "exec" "{\"command\":\"$synthetic_command\"}"
     exit 0
 fi
 
@@ -4065,12 +4375,15 @@ if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( 
     exit 0
 fi
 
-if [[ "$tool_calls_have_disallowed" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ]]; then
+if [[ "$tool_calls_have_disallowed" == true || "$tool_calls_have_missing_required_arguments" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ]]; then
     fallback_text='В Telegram-safe режиме я не запускаю инструменты и не показываю внутренние логи. Для browser/search/process workflow продолжим в web UI или операторской сессии.'
+    if [[ "$tool_calls_have_missing_required_arguments" == true && "$is_telegram_safe_lane" != true ]]; then
+        fallback_text='Внутренний tool-path сформировал некорректный вызов, поэтому я не показываю сырые tool-ошибки. Повтори запрос, и я отвечу без внутренней диагностики.'
+    fi
     if [[ "$has_skill_path_false_negative" == true ]]; then
         fallback_text='Я не использую sandbox filesystem как доказательство отсутствия навыков. Для работы с навыками продолжу через runtime skill-tools без проверки директорий.'
     fi
-    write_audit_line "emit_modify event=$event reason=fallback tool_calls_present=$tool_calls_present disallowed_tools=$tool_calls_have_disallowed delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning false_negative=$has_skill_path_false_negative"
+    write_audit_line "emit_modify event=$event reason=fallback tool_calls_present=$tool_calls_present disallowed_tools=$tool_calls_have_disallowed missing_required_args=$tool_calls_have_missing_required_arguments delivery_telemetry=$has_delivery_internal_telemetry after_llm_intent=$has_after_llm_tool_intent planning=$has_user_visible_internal_planning false_negative=$has_skill_path_false_negative"
     if [[ "$event" == "AfterLLMCall" ]]; then
         emit_modified_payload "$fallback_text" true
     else

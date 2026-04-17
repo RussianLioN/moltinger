@@ -35,7 +35,7 @@ EOF
 {"message":"MCP auto-restart failed"}
 {"tool":"mcp__tavily__tavily_search","message":"tool invocation"}
 {"tool":"memory_search","message":"tool execution failed"}
-all embedding providers failed: openai: HTTP status client error (400 Bad Request) for url (https://api.z.ai/api/coding/paas/v4/embeddings); groq: HTTP status client error (401 Unauthorized) for url (https://api.groq.com/openai/v1/embeddings)
+all embedding providers failed: openai: HTTP status client error (400 Bad Request) for url (https://open.bigmodel.cn/api/coding/paas/v4/embeddings); groq: HTTP status client error (401 Unauthorized) for url (https://api.groq.com/openai/v1/embeddings)
 EOF
 
     test_start "component_diagnostics_script_parses_tavily_and_embedding_failure_taxonomy"

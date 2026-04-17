@@ -198,15 +198,15 @@ check_http_health() {
 # LLM PROVIDER HEALTH CHECKS (Circuit Breaker Support)
 # ========================================================================
 
-# Production chain defaults: OpenAI Codex OAuth -> Ollama -> Z.ai.
+# Production chain defaults: OpenAI Codex OAuth -> Ollama -> Claude -> GLM.
 PRIMARY_PROVIDER="${PRIMARY_PROVIDER:-openai-codex}"
 FALLBACK_PROVIDER="${FALLBACK_PROVIDER:-ollama}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
 
-# GLM API configuration
-GLM_API_HOST="${GLM_API_HOST:-https://api.z.ai}"
+# GLM API configuration (official BigModel Coding Plan endpoint)
+GLM_API_BASE="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
 GLM_API_KEY="${GLM_API_KEY:-}"
-GLM_MODEL="${GLM_MODEL:-glm-5}"
+GLM_MODEL="${GLM_MODEL:-glm-5.1}"
 GLM_HEALTH_TIMEOUT="${GLM_HEALTH_TIMEOUT:-10}"
 
 # Ollama API configuration
@@ -238,10 +238,10 @@ check_openai_codex_health() {
     return 1
 }
 
-# Check GLM (Z.ai) API health
+# Check official GLM (BigModel) API health
 check_glm_health() {
     local timeout="${1:-$GLM_HEALTH_TIMEOUT}"
-    local url="${GLM_API_HOST}/v1/models"
+    local url="${GLM_API_BASE%/}/models"
     local response_code
 
     # If no API key, skip check
@@ -336,7 +336,7 @@ check_primary_provider_health() {
         openai-codex)
             check_openai_codex_health "$@"
             ;;
-        glm|zai)
+        glm)
             check_glm_health "$@"
             ;;
         ollama)
@@ -354,7 +354,7 @@ check_fallback_provider_health() {
         ollama)
             check_ollama_health "$@"
             ;;
-        glm|zai)
+        glm)
             check_glm_health "$@"
             ;;
         openai-codex)

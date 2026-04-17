@@ -25,26 +25,44 @@ Research completed via deep documentation analysis from https://docs.moltis.org/
 
 ---
 
-### 2. LLM Provider
+### 2. LLM Provider Chain
 
-**Decision**: GLM (Zhipu AI) via OpenAI-compatible endpoint
+**Decision**: Primary `openai-codex::gpt-5.4` with ordered fallback `ollama -> anthropic -> glm::glm-5.1`
 
-**Rationale**: User's preferred provider with coding-focused models.
+**Rationale**: Moltis should keep Codex as the preferred coding model while preserving an explicit failover chain. Legacy Z.ai API-key usage is no longer acceptable outside IDE-only coding flows, so GLM remains only as the final fallback via the official BigModel endpoint.
 
-**Endpoint**: `https://api.z.ai/api/coding/paas/v4`
+**Final GLM Endpoint**: `https://open.bigmodel.cn/api/coding/paas/v4`
 
 **Configuration**:
 ```toml
-[providers.glm-coding]
+[providers.openai-codex]
 enabled = true
-base_url = "https://api.z.ai/api/coding/paas/v4"
-model = "glm-4-plus"
+
+[providers.ollama]
+enabled = true
+
+[providers.anthropic]
+enabled = true
+
+[providers.openai]
+enabled = true
+alias = "glm"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.1"
+models = ["glm-5.1"]
+
+[failover]
+fallback_models = [
+  "ollama::gemini-3-flash-preview:cloud",
+  "anthropic::claude-sonnet-4-20250514",
+  "glm::glm-5.1",
+]
 ```
 
 **Alternatives Considered**:
-- OpenAI Codex — rejected: user preference for GLM
-- GitHub Copilot — rejected: requires subscription
-- Local LLM — rejected: hardware constraints
+- Z.ai Coding API keys — rejected: provider policy no longer allows non-IDE API-key usage without account risk
+- GLM as primary provider — rejected: operational policy now reserves GLM for final fallback only
+- Local-only LLM — rejected: hardware constraints and weaker coding quality for the primary lane
 
 ---
 

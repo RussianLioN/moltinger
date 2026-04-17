@@ -111,7 +111,7 @@ An incident is not closed until all of the following are true:
 ### Failover Chain
 
 ```text
-OpenAI Codex (`gpt-5.4`) -> Ollama Gemini -> GLM-5 (Z.ai)
+OpenAI Codex (`gpt-5.4`) -> Ollama Gemini -> Claude Sonnet -> GLM-5.1 (official BigModel)
 ```
 
 ### Circuit States

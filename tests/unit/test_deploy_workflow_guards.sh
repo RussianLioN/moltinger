@@ -801,6 +801,7 @@ test_render_moltis_env_script_renders_runtime_contract() {
     output_file="$tmp_dir/moltis.env"
 
     if ! MOLTIS_PASSWORD="secret" \
+        ANTHROPIC_API_KEY="anthropic-key" \
         GLM_API_KEY="glm-key" \
         OLLAMA_API_KEY="ollama-key" \
         TAVILY_API_KEY="tavily-key" \
@@ -817,6 +818,7 @@ test_render_moltis_env_script_renders_runtime_contract() {
     fi
 
     if ! grep -Fq "MOLTIS_PASSWORD=secret" "$output_file" || \
+       ! grep -Fq "ANTHROPIC_API_KEY=anthropic-key" "$output_file" || \
        ! grep -Fq "GLM_API_KEY=glm-key" "$output_file" || \
        ! grep -Fq "MOLTIS_DOMAIN=moltis.example.com" "$output_file" || \
        ! grep -Fq "MOLTIS_RUNTIME_CONFIG_DIR=/srv/runtime-config" "$output_file"; then

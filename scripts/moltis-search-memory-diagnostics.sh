@@ -122,7 +122,7 @@ if log_path:
         lambda line: "memory_search" in line and ("tool execution failed" in line or "all embedding providers failed" in line)
     )
     runtime["memory"]["openai_embeddings_400"] = count_lines(
-        lambda line: "https://api.z.ai/api/coding/paas/v4/embeddings" in line or "openai: HTTP status client error (400 Bad Request)" in line
+        lambda line: "https://open.bigmodel.cn/api/coding/paas/v4/embeddings" in line or "https://api.z.ai/api/coding/paas/v4/embeddings" in line or "openai: HTTP status client error (400 Bad Request)" in line
     )
     runtime["memory"]["groq_embeddings_401"] = count_lines(
         lambda line: "https://api.groq.com/openai/v1/embeddings" in line or "groq: HTTP status client error (401 Unauthorized)" in line

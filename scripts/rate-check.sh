@@ -55,7 +55,7 @@ get_429_count() {
                 ((count++)) || true
             fi
         fi
-    # Z.ai rate limit patterns: HTTP 429 OR code:"1302" (Z.ai specific)
+    # GLM provider rate limit patterns: HTTP 429 OR code:"1302" (legacy GLM-specific)
     done < <(grep -hE '(429.*Rate limit|"code":"1302")' $recent_files 2>/dev/null | tail -50)
 
     echo "$count"
