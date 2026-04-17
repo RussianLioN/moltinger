@@ -957,8 +957,6 @@ jobs:
       - name: Generate .env from Secrets
         env:
           MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

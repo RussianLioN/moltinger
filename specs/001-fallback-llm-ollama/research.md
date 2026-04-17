@@ -1,4 +1,4 @@
-# Research: Fallback LLM with Ollama Sidecar
+# Research: Fallback LLM with Ollama Cloud
 
 **Feature**: 001-fallback-llm-ollama
 **Date**: 2026-03-01
@@ -72,7 +72,7 @@ CLOSED → (3 failures) → OPEN → (60s) → HALF-OPEN → (success) → CLOSE
 **Schema**:
 ```json
 {
-  "current_provider": "glm",
+  "current_provider": "openai-codex",
   "circuit_state": "closed",
   "failure_count": 0,
   "last_failure": null,
@@ -94,9 +94,9 @@ CLOSED → (3 failures) → OPEN → (60s) → HALF-OPEN → (success) → CLOSE
 
 **Probe Implementation**:
 ```bash
-# GLM health check
-check_glm_health() {
-  curl -sf --max-time 5 "${GLM_API_URL}/v1/models" || return 1
+# Primary health check
+check_primary_health() {
+  curl -sf --max-time 5 "${PRIMARY_PROVIDER_HEALTHCHECK_URL}" || return 1
 }
 
 # Ollama health check

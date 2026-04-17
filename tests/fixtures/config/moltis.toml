@@ -72,7 +72,13 @@ name = "Fixture"
 timezone = "Europe/Moscow"
 
 [providers]
-offered = ["ollama"]
+offered = ["openai-codex", "ollama"]
+
+[providers.openai-codex]
+enabled = true
+model = "gpt-5.4"
+alias = "openai-codex"
+models = ["gpt-5.4"]
 
 [providers.ollama]
 enabled = true
@@ -81,17 +87,10 @@ model = "test-model"
 alias = "ollama"
 api_key = "${OLLAMA_API_KEY}"
 
-[providers.openai]
-enabled = false
-api_key = "${GLM_API_KEY}"
-model = "glm-5.1"
-base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
-alias = "glm"
-
 [chat]
 message_queue_mode = "followup"
-allowed_models = ["ollama::test-model"]
-priority_models = ["ollama::test-model"]
+allowed_models = ["openai-codex::gpt-5.4", "ollama::test-model"]
+priority_models = ["openai-codex::gpt-5.4", "ollama::test-model"]
 
 [tools]
 agent_timeout_secs = 15

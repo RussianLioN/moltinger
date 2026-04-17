@@ -340,22 +340,22 @@
 
 ## Phase 14: Primary Codex + Ordered Fallback Chain
 
-**Goal**: Configure the production provider chain with Codex primary and ordered fallbacks `ollama -> anthropic -> glm::glm-5.1`
+**Goal**: Configure the production provider chain with Codex primary and Ollama Cloud fallback
 
 **Independent Test**:
 1. Open Web UI
 2. Verify `openai-codex::gpt-5.4` remains the primary model
-3. Verify fallback order is `ollama`, then `anthropic`, then official BigModel `glm::glm-5.1`
+3. Verify the only active fallback lane is `ollama::gemini-3-flash-preview:cloud`
 4. Send a test message without any raw provider/tool leakage
 
 ### Implementation
 
-- [X] T052 [P] Create `config/moltis.toml` with primary Codex plus ordered fallback-chain settings
-- [X] T053 Add official BigModel GLM base_url: `https://open.bigmodel.cn/api/coding/paas/v4`
-- [X] T054 Add provider-chain secret requirements to `.env.example` and deployment docs (`OLLAMA_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`)
+- [X] T052 [P] Create `config/moltis.toml` with primary Codex plus Ollama Cloud fallback settings
+- [X] T053 Keep the primary lane on OpenAI Codex OAuth / `gpt-5.4` without static API-key coupling
+- [X] T054 Add provider-chain secret requirements to `.env.example` and deployment docs (`OLLAMA_API_KEY`)
 - [ ] T055 Test Web UI and Telegram entrypoints against the ordered provider chain
 
-**Checkpoint**: Provider chain working without legacy Z.ai aliases
+**Checkpoint**: Provider chain working without legacy Z.ai aliases or any retired non-Ollama fallback lanes
 
 **Artifacts**:
 - `config/moltis.toml`
@@ -502,7 +502,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 14
 
 - [ ] S001 Clone repository on server: `git clone https://github.com/RussianLioN/moltinger.git /opt/moltinger`
 - [ ] S002 Setup environment: `cp .env.example .env && nano .env`
-- [ ] S003 Add secrets to `.env` (`MOLTIS_PASSWORD`, `OLLAMA_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`)
+- [ ] S003 Add secrets to `.env` (`MOLTIS_PASSWORD`, `OLLAMA_API_KEY`)
 - [ ] S004 Run `make setup` to create networks and secrets
 - [ ] S005 Run `make deploy` for initial deployment
 - [ ] S006 Verify health: `curl https://ainetic.tech/health`

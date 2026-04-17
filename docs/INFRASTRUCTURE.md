@@ -303,8 +303,6 @@ docker logs moltis --tail 100
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `MOLTIS_PASSWORD` | Yes | Authentication password |
-| `ANTHROPIC_API_KEY` | No | Claude fallback API key |
-| `GLM_API_KEY` | Yes | Official BigModel GLM-5.1 last-fallback API key |
 | `OLLAMA_API_KEY` | No | Ollama Cloud key for `gemini-3-flash-preview:cloud` fallback |
 | `MOLTIS_DOMAIN` | No | Domain for Traefik |
 | `MOLTIS_RUNTIME_CONFIG_DIR` | No | Writable live Moltis config path on server (default `/opt/moltinger-state/config-runtime`) |

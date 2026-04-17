@@ -7,7 +7,7 @@
 
 Deploy Moltis AI assistant as a Docker container on ainetic.tech server with:
 - **Reverse Proxy**: Traefik (already deployed) with automatic TLS
-- **LLM Provider**: Primary `openai-codex::gpt-5.4` with ordered fallback `ollama -> anthropic -> glm::glm-5.1`
+- **LLM Provider**: Primary `openai-codex::gpt-5.4` with single fallback `ollama::gemini-3-flash-preview:cloud`
 - **Auto-updates**: Watchtower for automatic container updates
 - **Backup**: Daily cron backup with 7-day retention
 - **Authentication**: MOLTIS_PASSWORD for initial setup
@@ -110,7 +110,7 @@ moltinger/
                                       ▼
                     ┌─────────────────────────────────────────┐
                     │  Provider Chain                         │
-                    │  Codex -> Ollama -> Claude -> GLM 5.1  │
+                    │  Codex -> Ollama Cloud                 │
                     └─────────────────────────────────────────┘
 ```
 
@@ -154,7 +154,7 @@ Routing configuration:
 | Traefik | 3.x | Reverse proxy (existing) |
 | Moltis | latest | AI assistant |
 | Watchtower | latest | Auto-updates |
-| Provider chain | live | Codex primary + ordered fallbacks |
+| Provider chain | live | Codex primary + Ollama Cloud fallback |
 
 ## Security Considerations
 

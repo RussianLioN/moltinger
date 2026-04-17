@@ -198,16 +198,10 @@ check_http_health() {
 # LLM PROVIDER HEALTH CHECKS (Circuit Breaker Support)
 # ========================================================================
 
-# Production chain defaults: OpenAI Codex OAuth -> Ollama -> Claude -> GLM.
+# Production chain defaults: OpenAI Codex OAuth -> Ollama Cloud.
 PRIMARY_PROVIDER="${PRIMARY_PROVIDER:-openai-codex}"
 FALLBACK_PROVIDER="${FALLBACK_PROVIDER:-ollama}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
-
-# GLM API configuration (official BigModel Coding Plan endpoint)
-GLM_API_BASE="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
-GLM_API_KEY="${GLM_API_KEY:-}"
-GLM_MODEL="${GLM_MODEL:-glm-5.1}"
-GLM_HEALTH_TIMEOUT="${GLM_HEALTH_TIMEOUT:-10}"
 
 # Ollama API configuration
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
@@ -236,53 +230,6 @@ check_openai_codex_health() {
 
     log_error "OpenAI Codex auth is not valid"
     return 1
-}
-
-# Check official GLM (BigModel) API health
-check_glm_health() {
-    local timeout="${1:-$GLM_HEALTH_TIMEOUT}"
-    local url="${GLM_API_BASE%/}/models"
-    local response_code
-
-    # If no API key, skip check
-    if [[ -z "$GLM_API_KEY" ]]; then
-        log_warn "GLM_API_KEY not set, skipping GLM health check"
-        return 2  # Degraded - can't check
-    fi
-
-    log_info "Checking GLM API health at $url"
-
-    response_code=$(curl -s -o /dev/null -w "%{http_code}" \
-        --max-time "$timeout" \
-        -H "Authorization: Bearer $GLM_API_KEY" \
-        "$url" 2>/dev/null || echo "000")
-
-    case "$response_code" in
-        200|201)
-            log_info "GLM API is healthy (HTTP $response_code)"
-            return 0
-            ;;
-        401|403)
-            log_error "GLM API authentication failed (HTTP $response_code)"
-            return 1
-            ;;
-        429)
-            log_warn "GLM API rate limited (HTTP $response_code)"
-            return 1
-            ;;
-        500|502|503|504)
-            log_error "GLM API server error (HTTP $response_code)"
-            return 1
-            ;;
-        000)
-            log_error "GLM API unreachable (timeout or connection refused)"
-            return 1
-            ;;
-        *)
-            log_warn "GLM API unexpected response (HTTP $response_code)"
-            return 1
-            ;;
-    esac
 }
 
 # Check Ollama API health
@@ -336,9 +283,6 @@ check_primary_provider_health() {
         openai-codex)
             check_openai_codex_health "$@"
             ;;
-        glm)
-            check_glm_health "$@"
-            ;;
         ollama)
             check_ollama_health "$@"
             ;;
@@ -353,9 +297,6 @@ check_fallback_provider_health() {
     case "$FALLBACK_PROVIDER" in
         ollama)
             check_ollama_health "$@"
-            ;;
-        glm)
-            check_glm_health "$@"
             ;;
         openai-codex)
             check_openai_codex_health "$@"

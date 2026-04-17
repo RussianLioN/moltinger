@@ -1,4 +1,4 @@
-# Data Model: Fallback LLM with Ollama Sidecar
+# Data Model: Fallback LLM with Ollama Cloud
 
 **Feature**: 001-fallback-llm-ollama
 **Date**: 2026-03-01
@@ -8,11 +8,9 @@
 ```
 ┌─────────────────┐     ┌─────────────────────┐
 │  LLM Provider   │     │  Circuit Breaker    │
-│  (4 instances)  │────▶│  State              │
+│  (2 instances)  │────▶│  State              │
 │  - openai-codex │     │  (1 instance)       │
 │  - ollama       │     └─────────────────────┘
-│  - anthropic    │
-│  - glm          │
 └────────┬────────┘              │
          │                       │
          │                       ▼
@@ -32,11 +30,11 @@ Represents an LLM API provider (primary or fallback).
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| name | string | Provider identifier | "openai-codex", "ollama", "anthropic", "glm" |
+| name | string | Provider identifier | "openai-codex", "ollama" |
 | type | enum | Provider type | "primary", "fallback" |
 | status | enum | Current availability | "available", "unavailable", "degraded" |
-| base_url | string | API endpoint | "https://api.anthropic.com", "http://localhost:11434", "https://open.bigmodel.cn/api/coding/paas/v4" |
-| model | string | Model identifier | "gpt-5.4", "gemini-3-flash-preview:cloud", "claude-sonnet-4-20250514", "glm-5.1" |
+| base_url | string | API endpoint | "http://localhost:11434" |
+| model | string | Model identifier | "gpt-5.4", "gemini-3-flash-preview:cloud" |
 | latency_p95 | number | 95th percentile latency (ms) | 2500, 12000 |
 | error_count | number | Consecutive errors | 0, 3 |
 | last_check | timestamp | Last health check time | "2026-03-01T12:00:00Z" |
@@ -139,20 +137,6 @@ model = "gpt-5.4"
 alias = "openai-codex"
 models = ["gpt-5.4"]
 
-[providers.anthropic]
-enabled = true
-api_key = "${ANTHROPIC_API_KEY}"
-model = "claude-sonnet-4-20250514"
-base_url = "https://api.anthropic.com"
-alias = "anthropic"
-
-[providers.openai]
-enabled = true
-api_key = "${GLM_API_KEY}"
-model = "glm-5.1"
-base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
-alias = "glm"
-
 [providers.ollama]
 enabled = true
 base_url = "http://ollama:11434"
@@ -164,23 +148,17 @@ api_key = "${OLLAMA_API_KEY}"
 [chat]
 allowed_models = [
   "openai-codex::gpt-5.4",
-  "ollama::gemini-3-flash-preview:cloud",
-  "anthropic::claude-sonnet-4-20250514",
-  "glm::glm-5.1"
+  "ollama::gemini-3-flash-preview:cloud"
 ]
 priority_models = [
   "openai-codex::gpt-5.4",
-  "ollama::gemini-3-flash-preview:cloud",
-  "anthropic::claude-sonnet-4-20250514",
-  "glm::glm-5.1"
+  "ollama::gemini-3-flash-preview:cloud"
 ]
 
 [failover]
 enabled = true
 fallback_models = [
-  "ollama::gemini-3-flash-preview:cloud",
-  "anthropic::claude-sonnet-4-20250514",
-  "glm::glm-5.1"
+  "ollama::gemini-3-flash-preview:cloud"
 ]
 health_check_interval = "5s"
 failure_threshold = 3
@@ -208,8 +186,6 @@ recovery_timeout = "60s"
 # Provider availability (gauge)
 llm_provider_available{provider="openai-codex"} 1
 llm_provider_available{provider="ollama"} 1
-llm_provider_available{provider="anthropic"} 1
-llm_provider_available{provider="glm"} 1
 
 # Failover counter
 llm_fallback_triggered_total{from="openai-codex",to="ollama",reason="health_check_failure"} 2

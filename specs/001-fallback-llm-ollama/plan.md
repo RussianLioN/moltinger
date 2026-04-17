@@ -1,13 +1,13 @@
-# Implementation Plan: Fallback LLM with Ollama Sidecar
+# Implementation Plan: Fallback LLM with Ollama Cloud
 
 **Branch**: `001-fallback-llm-ollama` | **Date**: 2026-03-01 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/001-fallback-llm-ollama/spec.md`
 
 ## Summary
 
-Реализовать отказоустойчивый fallback механизм для Moltis с Ollama sidecar контейнером и Circuit Breaker pattern для автоматического переключения при недоступности GLM API.
+Реализовать отказоустойчивый fallback механизм для Moltis с primary `openai-codex::gpt-5.4` через OAuth и единственным tracked fallback `ollama::gemini-3-flash-preview:cloud`.
 
-**Primary Requirement**: При падении GLM API система автоматически переключается на Ollama с Gemini-3-flash-preview за < 30 секунд.
+**Primary Requirement**: При падении primary Codex lane система автоматически переключается на Ollama Cloud за < 30 секунд.
 
 **Technical Approach**: Docker Compose sidecar + Bash scripts для health monitoring + TOML конфигурация для Moltis providers.
 
@@ -106,7 +106,7 @@ See [research.md](./research.md) for detailed findings.
 See [data-model.md](./data-model.md) for entity definitions.
 
 **Key Entities**:
-1. **LLM Provider** - GLM (primary) and Ollama (fallback)
+1. **LLM Provider** - OpenAI Codex (primary) and Ollama (fallback)
 2. **Circuit Breaker State** - CLOSED, OPEN, HALF-OPEN
 3. **Failover Event** - Switch records for observability
 
@@ -154,7 +154,7 @@ See [quickstart.md](./quickstart.md) for deployment instructions.
 | Ollama cold start (~60s) | Preload model in Docker entrypoint | Phase 1 |
 | Memory competition | Resource limits 8GB for Ollama | Phase 1 |
 | Race conditions | File locking with flock | Phase 3 |
-| GLM false positives | Configure proper timeout (5s) | Phase 3 |
+| False-positive primary outage detection | Configure proper timeout (5s) | Phase 3 |
 
 ## Success Metrics
 

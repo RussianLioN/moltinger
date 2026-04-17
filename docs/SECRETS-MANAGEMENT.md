@@ -21,8 +21,7 @@
 │                   GitHub Repository                      │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │              GitHub Secrets                        │  │
-│  │  • ANTHROPIC_API_KEY                              │  │
-│  │  • GLM_API_KEY                                    │  │
+│  │  • OLLAMA_API_KEY                                 │  │
 │  │  • BRAVE_API_KEY                                  │  │
 │  │  • ELEVENLABS_API_KEY                             │  │
 │  │  • MOLTIS_PASSWORD                                │  │
@@ -60,8 +59,7 @@ gh secret set SECRET_NAME --repo owner/repo
 
 # Use in GitHub Actions
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+  OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 ```
 
 ### 2. Environment Variables via CI/CD
@@ -70,8 +68,7 @@ env:
 # .github/workflows/deploy.yml
 - name: Create .env file
   run: |
-    echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" > .env
-    echo "GLM_API_KEY=${{ secrets.GLM_API_KEY }}" >> .env
+    echo "OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}" > .env
     scp .env $SSH_USER@$SSH_HOST:$DEPLOY_PATH/.env
 ```
 
@@ -128,9 +125,7 @@ gh workflow run deploy.yml
 
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
-| `ANTHROPIC_API_KEY` | Claude fallback | Moltis config + runtime fallback chain |
-| `GLM_API_KEY` | GLM/Zhipu AI LLM (Last fallback) | Moltis config + interactive assistant workflow |
-| `OLLAMA_API_KEY` | Ollama Cloud first fallback | Docker secrets |
+| `OLLAMA_API_KEY` | Ollama Cloud fallback | Moltis config + runtime fallback chain |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot auth | Moltis config |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook endpoint URL (optional) | Controlled webhook rollout |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram webhook anti-spoofing token (optional) | Controlled webhook rollout |
@@ -163,10 +158,10 @@ Rules:
 
 ### AI Workflow Secrets
 
-- Interactive assistant and deploy surfaces use `GLM_API_KEY` only against the official BigModel Coding Plan endpoint (`open.bigmodel.cn`), not Z.ai.
+- Interactive assistant and deploy surfaces no longer use provider API-key secrets beyond `OLLAMA_API_KEY` for the optional Ollama Cloud fallback lane.
 - `.github/workflows/claude-code-review.yml` no longer invokes an AI provider in GitHub Actions; it prepares a deterministic handoff for manual review in AI IDE.
 - `CLAUDE_CODE_OAUTH_TOKEN` is not required for current CI workflows.
-- `ANTHROPIC_API_KEY` is required when the Claude fallback lane must be active in runtime/deploy paths.
+- The tracked Moltis runtime/deploy contract now uses only `OLLAMA_API_KEY` as an optional fallback secret.
 - Legacy compatibility kill-switch: repository variable `AI_REVIEW_PROVIDER=off` may stay set, but the current review workflow is already deterministic-only and does not invoke an AI provider in GitHub Actions.
 - Rollback artifacts for legacy Anthropic workflows are stored in:
   - `.github/workflows/claude.legacy.yml.disabled`
@@ -193,26 +188,6 @@ The Ollama fallback system requires the following secret:
 ```bash
 gh secret set OLLAMA_API_KEY --repo RussianLioN/moltinger
 ```
-
-### Claude Fallback Secret
-
-| Secret | Required | Purpose |
-|--------|----------|---------|
-| `ANTHROPIC_API_KEY` | Optional but recommended | Claude Sonnet fallback lane |
-
-**When ANTHROPIC_API_KEY is needed:**
-- When Claude must participate in the tracked fallback chain
-- When deploy/runtime should expose `anthropic::claude-sonnet-4-20250514`
-
-### GLM Last-Fallback Secret
-
-| Secret | Required | Purpose |
-|--------|----------|---------|
-| `GLM_API_KEY` | Required for full fallback chain | Final fallback to `glm-5.1` via official BigModel |
-
-**When GLM_API_KEY is needed:**
-- When Codex, Ollama, and Claude are unavailable
-- For AI workflow jobs that still use the official BigModel Coding Plan path outside the Moltis primary runtime path
 
 ### Runtime Config Persistence
 

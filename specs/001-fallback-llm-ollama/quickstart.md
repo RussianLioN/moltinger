@@ -1,4 +1,4 @@
-# Quick Start: Fallback LLM with Ollama Sidecar
+# Quick Start: Fallback LLM with Ollama Cloud
 
 **Feature**: 001-fallback-llm-ollama
 **Time to Deploy**: ~30 minutes
@@ -51,7 +51,7 @@ curl http://localhost:11434/api/tags
 # Check circuit breaker state
 cat /tmp/moltis-llm-state.json | jq .
 
-# Simulate GLM failure (test mode)
+# Simulate primary Codex failure (test mode)
 # docker compose -f docker-compose.prod.yml exec moltis ...
 ```
 
@@ -149,7 +149,7 @@ docker compose exec ollama cat /run/secrets/ollama_api_key
 ## Next Steps
 
 1. **Monitor**: Check Prometheus metrics at http://localhost:9090
-2. **Test failover**: Simulate GLM outage and verify switch to Ollama
+2. **Test failover**: Simulate primary outage and verify switch to Ollama
 3. **Alert setup**: Configure AlertManager for failover notifications
 
 ## Rollback

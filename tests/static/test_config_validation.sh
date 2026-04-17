@@ -610,11 +610,12 @@ run_static_config_validation_tests() {
         test_fail "Tracked Moltis version must resolve to an explicit GHCR tag without leading v and be validated by scripts/moltis-version.sh"
     fi
 
-    test_start "static_fixture_disables_openai_for_pr_gate"
-    if rg -n '^\[providers\.openai\]' -A3 "$TEST_FIXTURE_CONFIG" | rg -q 'enabled = false'; then
+    test_start "static_fixture_uses_codex_primary_without_legacy_openai_provider"
+    if rg -q '^\[providers\.openai-codex\]' "$TEST_FIXTURE_CONFIG" && \
+       ! rg -q '^\[providers\.openai\]' "$TEST_FIXTURE_CONFIG"; then
         test_pass
     else
-        test_fail "Fixture config should disable OpenAI provider"
+        test_fail "Fixture config should use openai-codex primary without legacy providers.openai drift"
     fi
 
     test_start "static_fixture_uses_internal_ollama_service"

@@ -138,9 +138,7 @@ make logs LOGS_OPTS=-f
 |--------|--------|---------|
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
 | TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
-| OLLAMA_API_KEY | ✅/optional | Ollama Cloud first fallback |
-| ANTHROPIC_API_KEY | ✅/optional | Claude fallback |
-| GLM_API_KEY | ✅ | Official BigModel GLM-5.1 last fallback + interactive assistant workflow |
+| OLLAMA_API_KEY | ✅/optional | Ollama Cloud fallback |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
 
 Runtime-only auth state:

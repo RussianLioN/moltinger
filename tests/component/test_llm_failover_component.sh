@@ -14,7 +14,6 @@ export CIRCUIT_BREAKER_RECOVERY_TIMEOUT=2
 export CIRCUIT_BREAKER_SUCCESS_THRESHOLD=1
 export PRIMARY_PROVIDER="openai-codex"
 export FALLBACK_PROVIDER="ollama"
-export GLM_API_KEY="fixture-glm"
 export OLLAMA_HOST="http://127.0.0.1:11434"
 
 # shellcheck source=scripts/health-monitor.sh
