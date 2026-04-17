@@ -392,16 +392,16 @@ assert_lt() {
 }
 
 mock_glm_failure() {
-    export GLM_API_ENDPOINT_REAL="${GLM_API_ENDPOINT:-https://open.bigmodel.cn/api/paas/v4/chat/completions}"
-    export GLM_API_ENDPOINT="http://127.0.0.1:49999"
+    export GLM_API_BASE_REAL="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
+    export GLM_API_BASE="http://127.0.0.1:49999"
 }
 
 restore_glm() {
-    if [[ -n "${GLM_API_ENDPOINT_REAL:-}" ]]; then
-        export GLM_API_ENDPOINT="$GLM_API_ENDPOINT_REAL"
-        unset GLM_API_ENDPOINT_REAL
+    if [[ -n "${GLM_API_BASE_REAL:-}" ]]; then
+        export GLM_API_BASE="$GLM_API_BASE_REAL"
+        unset GLM_API_BASE_REAL
     else
-        unset GLM_API_ENDPOINT
+        unset GLM_API_BASE
     fi
 }
 

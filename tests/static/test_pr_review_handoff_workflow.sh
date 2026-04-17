@@ -44,7 +44,7 @@ run_all_tests() {
 
     test_start "pr_review_handoff_workflow_removes_ai_provider_dependencies"
     if [[ -f "$WORKFLOW_FILE" ]] && \
-       ! rg -q 'GLM_API_KEY|AI_REVIEW_PROVIDER|GLM_API_BASE|GLM_MODEL|zai_chat_completion\.sh|Provider\*\*: Z\.ai|AI review did not run' "$WORKFLOW_FILE"; then
+       ! rg -q 'GLM_API_KEY|AI_REVIEW_PROVIDER|GLM_API_BASE|GLM_MODEL|glm_chat_completion\.sh|Provider\*\*: Z\.ai|AI review did not run' "$WORKFLOW_FILE"; then
         test_pass
     else
         test_fail "PR review workflow must not depend on GLM or any in-workflow AI provider path"

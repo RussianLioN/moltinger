@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Shared Z.ai (GLM) chat completion helper for GitHub Actions workflows.
+# Shared GLM (official BigModel) chat completion helper for GitHub Actions workflows.
 
 set -euo pipefail
 
 usage() {
     cat <<'USAGE'
 Usage:
-  zai_chat_completion.sh \
+  glm_chat_completion.sh \
     --prompt-file <path> \
     --output-file <path> \
     [--system-prompt <text>] \
@@ -18,15 +18,15 @@ Usage:
     [--retry-count <int>]
 
 Environment:
-  GLM_API_KEY               Required API key for https://api.z.ai
-  GLM_MODEL                 Default: glm-5
-  GLM_API_BASE              Default: https://api.z.ai/api/coding/paas/v4
+  GLM_API_KEY               Required API key for official BigModel Coding Plan
+  GLM_MODEL                 Default: glm-5.1
+  GLM_API_BASE              Default: https://open.bigmodel.cn/api/coding/paas/v4
   GLM_MAX_TOKENS            Default: 1800
   GLM_TEMPERATURE           Default: 0.2
   GLM_TIMEOUT_SECONDS       Default: 90
   GLM_RETRY_COUNT           Default: 1
   GLM_SYSTEM_PROMPT         Optional fallback system prompt
-  ZAI_RAW_RESPONSE_FILE     Optional file path to persist raw JSON response
+  GLM_RAW_RESPONSE_FILE     Optional file path to persist raw JSON response
 USAGE
 }
 
@@ -41,8 +41,8 @@ require_command() {
 PROMPT_FILE=""
 OUTPUT_FILE=""
 SYSTEM_PROMPT="${GLM_SYSTEM_PROMPT:-You are a precise software engineering assistant. Return valid Markdown only.}"
-MODEL="${GLM_MODEL:-glm-5}"
-API_BASE="${GLM_API_BASE:-https://api.z.ai/api/coding/paas/v4}"
+MODEL="${GLM_MODEL:-glm-5.1}"
+API_BASE="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
 MAX_TOKENS="${GLM_MAX_TOKENS:-1800}"
 TEMPERATURE="${GLM_TEMPERATURE:-0.2}"
 TIMEOUT_SECONDS="${GLM_TIMEOUT_SECONDS:-90}"
@@ -110,7 +110,7 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
 fi
 
 if [[ -z "${GLM_API_KEY:-}" ]]; then
-    echo "ERROR: GLM_API_KEY is required for Z.ai requests." >&2
+    echo "ERROR: GLM_API_KEY is required for official BigModel GLM requests." >&2
     exit 3
 fi
 
@@ -154,10 +154,10 @@ http_code="$(curl -sS \
 
 if [[ "$http_code" != "200" ]]; then
     error_message="$(jq -r '.error.message // .message // "Unknown API error"' "$response_file" 2>/dev/null || true)"
-    if [[ -n "${ZAI_RAW_RESPONSE_FILE:-}" ]]; then
-        cp "$response_file" "$ZAI_RAW_RESPONSE_FILE" || true
+    if [[ -n "${GLM_RAW_RESPONSE_FILE:-}" ]]; then
+        cp "$response_file" "$GLM_RAW_RESPONSE_FILE" || true
     fi
-    echo "ERROR: Z.ai request failed (HTTP ${http_code}): ${error_message}" >&2
+    echo "ERROR: GLM request failed (HTTP ${http_code}): ${error_message}" >&2
     exit 5
 fi
 
@@ -172,15 +172,15 @@ content="$(jq -r '
 ' "$response_file" 2>/dev/null || true)"
 
 if [[ -z "$content" ]]; then
-    if [[ -n "${ZAI_RAW_RESPONSE_FILE:-}" ]]; then
-        cp "$response_file" "$ZAI_RAW_RESPONSE_FILE" || true
+    if [[ -n "${GLM_RAW_RESPONSE_FILE:-}" ]]; then
+        cp "$response_file" "$GLM_RAW_RESPONSE_FILE" || true
     fi
-    echo "ERROR: Z.ai response did not contain choices[0].message.content" >&2
+    echo "ERROR: GLM response did not contain choices[0].message.content" >&2
     exit 6
 fi
 
 printf '%s\n' "$content" > "$OUTPUT_FILE"
 
-if [[ -n "${ZAI_RAW_RESPONSE_FILE:-}" ]]; then
-    cp "$response_file" "$ZAI_RAW_RESPONSE_FILE" || true
+if [[ -n "${GLM_RAW_RESPONSE_FILE:-}" ]]; then
+    cp "$response_file" "$GLM_RAW_RESPONSE_FILE" || true
 fi

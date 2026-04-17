@@ -7,7 +7,7 @@
 
 Deploy Moltis AI assistant as a Docker container on ainetic.tech server with:
 - **Reverse Proxy**: Traefik (already deployed) with automatic TLS
-- **LLM Provider**: GLM (Zhipu AI) via OpenAI-compatible endpoint
+- **LLM Provider**: Primary `openai-codex::gpt-5.4` with ordered fallback `ollama -> anthropic -> glm::glm-5.1`
 - **Auto-updates**: Watchtower for automatic container updates
 - **Backup**: Daily cron backup with 7-day retention
 - **Authentication**: MOLTIS_PASSWORD for initial setup
@@ -109,8 +109,8 @@ moltinger/
                                       │
                                       ▼
                     ┌─────────────────────────────────────────┐
-                    │   GLM API (api.z.ai)                    │
-                    │   OpenAI-compatible endpoint            │
+                    │  Provider Chain                         │
+                    │  Codex -> Ollama -> Claude -> GLM 5.1  │
                     └─────────────────────────────────────────┘
 ```
 
@@ -127,7 +127,7 @@ Primary deployment configuration with:
 ### 2. config/moltis.toml
 
 Moltis configuration with:
-- GLM provider settings
+- ordered provider-chain settings
 - Sandbox configuration
 - Authentication settings
 - Memory system settings
@@ -154,7 +154,7 @@ Routing configuration:
 | Traefik | 3.x | Reverse proxy (existing) |
 | Moltis | latest | AI assistant |
 | Watchtower | latest | Auto-updates |
-| GLM API | v4 | LLM provider |
+| Provider chain | live | Codex primary + ordered fallbacks |
 
 ## Security Considerations
 
@@ -168,7 +168,7 @@ Routing configuration:
 
 1. **Phase 1**: Deploy basic container (no sandbox)
 2. **Phase 2**: Configure Traefik labels
-3. **Phase 3**: Setup GLM provider
+3. **Phase 3**: Setup provider chain and fallback policy
 4. **Phase 4**: Enable sandbox (Docker socket)
 5. **Phase 5**: Configure backups
 6. **Phase 6**: Enable Watchtower

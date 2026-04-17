@@ -192,6 +192,8 @@ create_workspace_fixture() {
     git -C "$workspace_root" init -q
     git -C "$workspace_root" config user.name "Codex Test"
     git -C "$workspace_root" config user.email "codex@example.com"
+    git -C "$workspace_root" config core.hooksPath /dev/null
+    git -C "$workspace_root" config commit.gpgsign false
     printf 'runtime\n' >"$workspace_root/runtime.txt"
     cat >"$workspace_root/config/moltis.toml" <<EOF
 [memory]
@@ -329,6 +331,48 @@ EOF
        [[ "$(jq -r '.details.auth_status_valid' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.details.auth_validation_path' "$output_json")" != "status" ]]; then
         test_fail "Runtime attestation success output does not reflect the expected provenance details"
+        rm -rf "$fixture_root"
+        return
+    fi
+    test_pass
+
+    cat >"$runtime_config_dir/provider_keys.json" <<'EOF'
+{
+  "openai-codex": {
+    "models": ["gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark"]
+  },
+  "zai": {
+    "models": ["glm-5.1"]
+  },
+  "custom-zai-telegram-safe": {
+    "models": ["glm-5"]
+  }
+}
+EOF
+
+    test_start "component_runtime_attestation_fails_when_legacy_runtime_provider_aliases_survive"
+    set +e
+    PATH="$fake_bin:$PATH" \
+        FAKE_DOCKER_MOUNTS_FILE="$mounts_file" \
+        FAKE_MOLTIS_VERSION="0.10.18" \
+        FAKE_DOCKER_STATE="healthy" \
+        FAKE_DOCKER_WORKDIR="/server" \
+        FAKE_CURL_HTTP_CODE="200" \
+        FAKE_LIVE_GIT_SHA="$live_sha" \
+        MOLTIS_RUNTIME_CONFIG_DIR_ALLOWLIST="$runtime_config_dir" \
+        bash "$ATTESTATION_SCRIPT" \
+            --json \
+            --deploy-path "$workspace_root" \
+            --active-path "$active_root" \
+            --expected-auth-provider "openai-codex" >"$output_json" 2>"$fixture_root/stderr-legacy-runtime-provider-aliases.log"
+    exit_code=$?
+    set -e
+
+    if [[ "$exit_code" -eq 0 ]] || \
+       [[ "$(jq -r '.status' "$output_json")" != "failure" ]] || \
+       ! jq -e '.errors[] | select(.code == "LEGACY_RUNTIME_PROVIDER_ALIAS_PRESENT")' "$output_json" >/dev/null 2>&1 || \
+       [[ "$(jq -r '.details.legacy_runtime_provider_aliases | join(",")' "$output_json")" != "zai,custom-zai-telegram-safe" ]]; then
+        test_fail "Runtime attestation must fail when provider_keys.json still exposes removed legacy provider aliases"
         rm -rf "$fixture_root"
         return
     fi

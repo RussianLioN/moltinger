@@ -11,7 +11,7 @@
 ### Session 2026-02-14
 
 - Q: Какой reverse proxy использовать? → A: **Traefik** (уже развёрнут на сервере)
-- Q: Какой LLM провайдер использовать? → A: **GLM (Zhipu AI)** через OpenAI-compatible endpoint `https://api.z.ai/api/coding/paas/v4`
+- Q: Какой LLM провайдер использовать? → A: **Primary `openai-codex::gpt-5.4` + ordered fallback `ollama -> anthropic -> glm::glm-5.1`**, где GLM идёт только через официальный BigModel endpoint `https://open.bigmodel.cn/api/coding/paas/v4`
 - Q: Как обновлять контейнер Moltis? → A: **Watchtower** для автоматических обновлений
 - Q: Нужна ли стратегия backup для volumes? → A: **Cron backup** — ежедневное резервирование с rotation 7 дней
 - Q: Что НЕ входит в scope? → A: **Базовый out-of-scope** — кластеризация, multi-region, SLA guarantees
@@ -214,7 +214,7 @@
 - **Data Volume**: Персистентное хранилище для баз данных, сессий, memory files, логов (путь: /home/moltis/.moltis)
 - **Docker Socket**: Unix socket для доступа к Docker daemon, необходим для sandboxed выполнения команд
 - **Reverse Proxy**: Traefik (уже развёрнут на сервере) для TLS-терминации и маршрутизации трафика
-- **LLM Provider**: GLM (Zhipu AI) через OpenAI-compatible endpoint `https://api.z.ai/api/coding/paas/v4`
+- **LLM Provider**: primary `openai-codex::gpt-5.4` с fallback-цепочкой `ollama -> anthropic -> glm::glm-5.1`, где GLM использует официальный BigModel endpoint `https://open.bigmodel.cn/api/coding/paas/v4`
 - **Credentials**: Пароли (Argon2id хеш), passkeys (WebAuthn), API keys (SHA-256 хеш), session cookies
 
 ## Success Criteria *(mandatory)*
@@ -475,30 +475,51 @@ services:
 
 ---
 
-## LLM Provider Configuration (GLM)
+## LLM Provider Configuration (Primary Codex + Ordered Fallbacks)
 
 ### Endpoint
 
-**Base URL**: `https://api.z.ai/api/coding/paas/v4`
+**Primary**: `openai-codex::gpt-5.4`
+**Fallbacks**: `ollama::gemini-3-flash-preview:cloud` → `anthropic::claude-sonnet-4-20250514` → `glm::glm-5.1`
+**Final GLM Base URL**: `https://open.bigmodel.cn/api/coding/paas/v4`
 
 **Auth**: API Key (хранится в `provider_keys.json`)
 
 ### Configuration (moltis.toml)
 
 ```toml
-[providers]
-default = "glm-coding"
-
-[providers.glm-coding]
+[providers.openai-codex]
 enabled = true
-# OpenAI-compatible endpoint для GLM
-base_url = "https://api.z.ai/api/coding/paas/v4"
-model = "glm-4-plus"  # или другая модель из линейки
+model = "gpt-5.4"
+alias = "openai-codex"
+models = ["gpt-5.4"]
+
+[providers.ollama]
+enabled = true
+base_url = "http://ollama:11434"
+model = "gemini-3-flash-preview:cloud"
+alias = "ollama"
+api_key = "${OLLAMA_API_KEY}"
+
+[providers.anthropic]
+enabled = true
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-sonnet-4-20250514"
+base_url = "https://api.anthropic.com"
+alias = "anthropic"
+
+[providers.openai]
+enabled = true
+api_key = "${GLM_API_KEY}"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.1"
+alias = "glm"
+models = ["glm-5.1"]
 ```
 
 ### API Key Setup
 
-API key для GLM устанавливается через Web UI при первом запуске или напрямую в `~/.config/moltis/provider_keys.json`.
+OAuth / provider keys устанавливаются через Web UI при первом запуске или напрямую в `~/.config/moltis/provider_keys.json`, но Z.ai-specific provider aliases больше не используются.
 
 ---
 

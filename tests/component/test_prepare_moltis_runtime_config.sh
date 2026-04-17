@@ -23,6 +23,11 @@ run_component_prepare_moltis_runtime_config_tests() {
 enabled = true
 model = "gpt-5.4"
 models = ["gpt-5.4"]
+
+[providers.openai]
+enabled = true
+model = "glm-5.1"
+alias = "glm"
 EOF
     printf 'tracked\n' >"$static_dir/subdir/marker.txt"
 
@@ -35,6 +40,9 @@ EOF
     "models": ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex"]
   },
   "zai": {
+    "models": ["glm-5-turbo", "glm-5"]
+  },
+  "custom-zai-telegram-safe": {
     "models": ["glm-5"]
   }
 }
@@ -52,8 +60,15 @@ EOF
 
     if [[ "$(jq -r '."openai-codex".models[0]' "$runtime_dir/provider_keys.json")" != "gpt-5.4" ]] || \
        [[ "$(jq -r '."openai-codex".models[1]' "$runtime_dir/provider_keys.json")" != "gpt-5.4-mini" ]] || \
-       [[ "$(jq -r '.zai.models[0]' "$runtime_dir/provider_keys.json")" != "glm-5" ]]; then
-        test_fail "prepare-moltis-runtime-config.sh must keep tracked gpt-5.4 first while preserving the rest of provider_keys.json"
+       [[ "$(jq -r '.glm.models[0]' "$runtime_dir/provider_keys.json")" != "glm-5.1" ]] || \
+       [[ "$(jq -r '.glm.models[1]' "$runtime_dir/provider_keys.json")" != "glm-5" ]]; then
+        test_fail "prepare-moltis-runtime-config.sh must keep tracked provider preferences primary while migrating legacy Z.ai aliases"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    if jq -e '.zai or .["custom-zai-telegram-safe"] or .["zai-telegram-safe"]' "$runtime_dir/provider_keys.json" >/dev/null 2>&1; then
+        test_fail "prepare-moltis-runtime-config.sh must remove legacy Z.ai runtime aliases from provider_keys.json"
         rm -rf "$fixture_root"
         return
     fi

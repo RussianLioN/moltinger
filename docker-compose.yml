@@ -88,7 +88,7 @@ services:
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       # Tavily API for MCP server
       TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
-      # GLM-5 API key for Z.ai Coding Plan (OpenAI-compatible)
+      # GLM-5.1 API key for official BigModel Coding Plan (OpenAI-compatible)
       GLM_API_KEY_FILE: /run/secrets/glm_api_key
 
     # Docker secrets for secure credential management

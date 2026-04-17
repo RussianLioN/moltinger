@@ -317,7 +317,7 @@ receivers:
           *Description:* {{ .Annotations.description }}
 
           *Immediate Actions:*
-          1. Check GLM (Z.ai) API status
+          1. Check official GLM (BigModel) API status
           2. Check Ollama container: `docker logs ollama-fallback`
           3. Verify OLLAMA_API_KEY is valid
           4. Check network connectivity

@@ -95,6 +95,60 @@ normalize_openai_codex_model_preferences() {
     log "normalized runtime-managed openai-codex preferences to keep $tracked_model primary"
 }
 
+normalize_glm_provider_preferences() {
+    local tracked_model provider_alias provider_keys_file tmp_file
+
+    tracked_model="$(read_toml_key "$STATIC_CONFIG_DIR/moltis.toml" "[providers.openai]" "model" || true)"
+    provider_alias="$(read_toml_key "$STATIC_CONFIG_DIR/moltis.toml" "[providers.openai]" "alias" || true)"
+    provider_keys_file="$RUNTIME_CONFIG_DIR/provider_keys.json"
+
+    [[ -n "$tracked_model" && -n "$provider_alias" ]] || return 0
+    [[ -f "$provider_keys_file" ]] || return 0
+
+    if ! command -v jq >/dev/null 2>&1; then
+        log "jq is unavailable, skipping GLM runtime preference normalization"
+        return 0
+    fi
+
+    tmp_file="$provider_keys_file.tmp.$$"
+    if ! jq \
+        --arg provider_alias "$provider_alias" \
+        --arg tracked_model "$tracked_model" \
+        '
+        . as $root
+        | ($root[$provider_alias] // $root["zai"] // {}) as $preferred_entry
+        | ($root["zai"] // {}) as $legacy_zai
+        | ($root["zai-telegram-safe"] // {}) as $legacy_safe_alias
+        | ($root["custom-zai-telegram-safe"] // {}) as $legacy_custom_safe
+        | .[$provider_alias] = (
+            (if ($preferred_entry | type) == "object" then $preferred_entry else {} end)
+            | .models = (
+                [$tracked_model] +
+                (
+                    (
+                        (
+                            (($preferred_entry.models // []) | if type == "array" then . else [] end) +
+                            (($legacy_zai.models // []) | if type == "array" then . else [] end) +
+                            (($legacy_safe_alias.models // []) | if type == "array" then . else [] end) +
+                            (($legacy_custom_safe.models // []) | if type == "array" then . else [] end)
+                        )
+                        | map(select(. != $tracked_model))
+                    )
+                    | unique
+                )
+            )
+        )
+        | del(.["zai"], .["zai-telegram-safe"], .["custom-zai-telegram-safe"])
+        ' "$provider_keys_file" >"$tmp_file"; then
+        rm -f "$tmp_file"
+        echo "Failed to normalize GLM provider preferences in $provider_keys_file" >&2
+        exit 1
+    fi
+
+    mv "$tmp_file" "$provider_keys_file"
+    log "normalized runtime-managed $provider_alias preferences and removed legacy runtime GLM aliases"
+}
+
 main() {
     if [[ ! -d "$STATIC_CONFIG_DIR" ]]; then
         echo "Static config directory not found: $STATIC_CONFIG_DIR" >&2
@@ -132,6 +186,7 @@ main() {
     done
 
     normalize_openai_codex_model_preferences
+    normalize_glm_provider_preferences
 
     if [[ -f "$RUNTIME_CONFIG_DIR/provider_keys.json" ]]; then
         chmod 600 "$RUNTIME_CONFIG_DIR/provider_keys.json" 2>/dev/null || true

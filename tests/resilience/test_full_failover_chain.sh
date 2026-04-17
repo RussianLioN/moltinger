@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/../lib/test_helpers.sh"
 
 ALLOW_DESTRUCTIVE_TESTS="${ALLOW_DESTRUCTIVE_TESTS:-0}"
 GLM_API_KEY="${GLM_API_KEY:-}"
+GLM_API_BASE="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
 OLLAMA_HOST="${OLLAMA_HOST:-}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-15}"
 MOLTIS_CONTAINER="${MOLTIS_CONTAINER:-moltis}"
@@ -44,17 +45,17 @@ run_resilience_failover_chain_tests() {
         test_fail "OpenAI Codex auth should be valid before failover drill"
     fi
 
-    test_start "resilience_failover_zai_health"
+    test_start "resilience_failover_glm_health"
     require_secret_or_skip GLM_API_KEY "GLM_API_KEY" || {
         generate_report
         return
     }
     local glm_code
-    glm_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$TEST_TIMEOUT" -H "Authorization: Bearer $GLM_API_KEY" "https://api.z.ai/v1/models" 2>/dev/null || echo '000')
+    glm_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$TEST_TIMEOUT" -H "Authorization: Bearer $GLM_API_KEY" "${GLM_API_BASE%/}/models" 2>/dev/null || echo '000')
     if [[ "$glm_code" =~ ^(200|201)$ ]]; then
         test_pass
     else
-        test_fail "Z.ai fallback provider should be reachable before failover drill (got $glm_code)"
+        test_fail "GLM fallback provider should be reachable before failover drill (got $glm_code)"
     fi
 
     test_start "resilience_failover_ollama_health"

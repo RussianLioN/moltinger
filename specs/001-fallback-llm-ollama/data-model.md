@@ -8,9 +8,11 @@
 ```
 ┌─────────────────┐     ┌─────────────────────┐
 │  LLM Provider   │     │  Circuit Breaker    │
-│  (2 instances)  │────▶│  State              │
-│  - GLM          │     │  (1 instance)       │
-│  - Ollama       │     └─────────────────────┘
+│  (4 instances)  │────▶│  State              │
+│  - openai-codex │     │  (1 instance)       │
+│  - ollama       │     └─────────────────────┘
+│  - anthropic    │
+│  - glm          │
 └────────┬────────┘              │
          │                       │
          │                       ▼
@@ -30,11 +32,11 @@ Represents an LLM API provider (primary or fallback).
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
-| name | string | Provider identifier | "glm", "ollama" |
+| name | string | Provider identifier | "openai-codex", "ollama", "anthropic", "glm" |
 | type | enum | Provider type | "primary", "fallback" |
 | status | enum | Current availability | "available", "unavailable", "degraded" |
-| base_url | string | API endpoint | "https://api.z.ai", "http://localhost:11434" |
-| model | string | Model identifier | "glm-5", "gemini-3-flash-preview:cloud" |
+| base_url | string | API endpoint | "https://api.anthropic.com", "http://localhost:11434", "https://open.bigmodel.cn/api/coding/paas/v4" |
+| model | string | Model identifier | "gpt-5.4", "gemini-3-flash-preview:cloud", "claude-sonnet-4-20250514", "glm-5.1" |
 | latency_p95 | number | 95th percentile latency (ms) | 2500, 12000 |
 | error_count | number | Consecutive errors | 0, 3 |
 | last_check | timestamp | Last health check time | "2026-03-01T12:00:00Z" |
@@ -63,7 +65,7 @@ Manages failover state machine.
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | state | enum | Circuit breaker state | "closed", "open", "half-open" |
-| current_provider | string | Active provider | "glm", "ollama" |
+| current_provider | string | Active provider | "openai-codex", "ollama" |
 | failure_count | number | Consecutive failures | 0, 3 |
 | success_count | number | Consecutive successes (half-open) | 0, 2 |
 | last_failure | timestamp | Last failure time | "2026-03-01T12:00:00Z" |
@@ -107,7 +109,7 @@ Records provider switches for observability.
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | timestamp | timestamp | Event time | "2026-03-01T11:55:00Z" |
-| from_provider | string | Previous provider | "glm" |
+| from_provider | string | Previous provider | "openai-codex" |
 | to_provider | string | New provider | "ollama" |
 | reason | enum | Switch reason | "health_check_failure", "manual", "recovery" |
 | failure_count | number | Failures that triggered switch | 3 |
@@ -121,7 +123,7 @@ Records provider switches for observability.
 | Reason | Trigger | Expected Frequency |
 |--------|---------|-------------------|
 | health_check_failure | 3 consecutive failures | Rare (< 1/month) |
-| recovery | GLM restored after outage | Rare |
+| recovery | Primary provider restored after outage | Rare |
 | manual | Admin intervention | Very rare |
 
 ---
@@ -131,11 +133,24 @@ Records provider switches for observability.
 ### Moltis Provider Configuration
 
 ```toml
+[providers.openai-codex]
+enabled = true
+model = "gpt-5.4"
+alias = "openai-codex"
+models = ["gpt-5.4"]
+
+[providers.anthropic]
+enabled = true
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-sonnet-4-20250514"
+base_url = "https://api.anthropic.com"
+alias = "anthropic"
+
 [providers.openai]
 enabled = true
 api_key = "${GLM_API_KEY}"
-model = "glm-5"
-base_url = "https://api.z.ai/api/coding/paas/v4"
+model = "glm-5.1"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
 alias = "glm"
 
 [providers.ollama]
@@ -146,10 +161,27 @@ alias = "ollama"
 # Optional: api_key for cloud models
 api_key = "${OLLAMA_API_KEY}"
 
+[chat]
+allowed_models = [
+  "openai-codex::gpt-5.4",
+  "ollama::gemini-3-flash-preview:cloud",
+  "anthropic::claude-sonnet-4-20250514",
+  "glm::glm-5.1"
+]
+priority_models = [
+  "openai-codex::gpt-5.4",
+  "ollama::gemini-3-flash-preview:cloud",
+  "anthropic::claude-sonnet-4-20250514",
+  "glm::glm-5.1"
+]
+
 [failover]
 enabled = true
-primary_provider = "glm"
-fallback_models = ["ollama::gemini-3-flash-preview:cloud"]
+fallback_models = [
+  "ollama::gemini-3-flash-preview:cloud",
+  "anthropic::claude-sonnet-4-20250514",
+  "glm::glm-5.1"
+]
 health_check_interval = "5s"
 failure_threshold = 3
 recovery_timeout = "60s"
@@ -174,17 +206,19 @@ recovery_timeout = "60s"
 
 ```
 # Provider availability (gauge)
-llm_provider_available{provider="glm"} 1
+llm_provider_available{provider="openai-codex"} 1
 llm_provider_available{provider="ollama"} 1
+llm_provider_available{provider="anthropic"} 1
+llm_provider_available{provider="glm"} 1
 
 # Failover counter
-llm_fallback_triggered_total{from="glm",to="ollama",reason="health_check_failure"} 2
+llm_fallback_triggered_total{from="openai-codex",to="ollama",reason="health_check_failure"} 2
 
 # Circuit breaker state
-moltis_circuit_state{provider="glm"} 0  # 0=closed, 1=open, 2=half-open
+moltis_circuit_state{provider="openai-codex"} 0  # 0=closed, 1=open, 2=half-open
 
 # Provider latency
-llm_request_duration_seconds{provider="glm",quantile="0.95"} 2.5
+llm_request_duration_seconds{provider="openai-codex",quantile="0.95"} 2.5
 ```
 
 ---
