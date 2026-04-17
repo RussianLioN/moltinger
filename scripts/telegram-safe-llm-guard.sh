@@ -449,6 +449,243 @@ extract_json_object() {
     '
 }
 
+extract_json_object_field_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+
+    [[ -n "$source_text" && -n "$key" ]] || return 1
+
+    printf '%s' "$source_text" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            state = "seek"
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == "seek") {
+                    if (substr(text, i, length(needle)) != needle) {
+                        continue
+                    }
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "{") {
+                        continue
+                    }
+                    state = "capture"
+                    depth = 0
+                    in_string = 0
+                    escape = 0
+                    i = j - 1
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        print value
+                        exit 0
+                    }
+                }
+            }
+        }
+        END {
+            if (value == "") {
+                exit 1
+            }
+        }
+    '
+}
+
+extract_json_objects_from_array() {
+    local array_json="${1:-}"
+    local perl_output=""
+
+    [[ -n "$array_json" && "$array_json" != "[]" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$array_json" | perl -e '
+                use strict;
+                use warnings;
+                use utf8;
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
+
+                local $/;
+                my $text = <STDIN>;
+                exit 1 unless defined $text && length $text;
+
+                my $n = length($text);
+                my $capturing = 0;
+                my $depth = 0;
+                my $in_string = 0;
+                my $escape = 0;
+                my $value = q();
+
+                for (my $i = 0; $i < $n; $i++) {
+                    my $char = substr($text, $i, 1);
+
+                    if (!$capturing) {
+                        next unless $char eq q({);
+                        $capturing = 1;
+                        $depth = 1;
+                        $in_string = 0;
+                        $escape = 0;
+                        $value = q({);
+                        next;
+                    }
+
+                    $value .= $char;
+
+                    if ($escape) {
+                        $escape = 0;
+                        next;
+                    }
+                    if ($char eq q(\\)) {
+                        $escape = 1;
+                        next;
+                    }
+                    if ($char eq q(")) {
+                        $in_string = !$in_string;
+                        next;
+                    }
+                    next if $in_string;
+
+                    if ($char eq q({)) {
+                        $depth++;
+                        next;
+                    }
+                    if ($char eq q(})) {
+                        $depth--;
+                        if ($depth == 0) {
+                            print $value, qq(\n);
+                            $capturing = 0;
+                            $value = q();
+                        }
+                    }
+                }
+            ' 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s\n' "$perl_output"
+            return 0
+        fi
+    fi
+
+    printf '%s' "$array_json" | awk '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            value = ""
+            depth = 0
+            in_string = 0
+            escape = 0
+            capturing = 0
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (!capturing) {
+                    if (c != "{") {
+                        continue
+                    }
+                    capturing = 1
+                    depth = 1
+                    in_string = 0
+                    escape = 0
+                    value = "{"
+                    continue
+                }
+
+                value = value c
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+                if (in_string) {
+                    continue
+                }
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        print value "\n"
+                        capturing = 0
+                        value = ""
+                    }
+                }
+            }
+        }
+    '
+}
+
+string_has_nonwhitespace() {
+    local value="${1:-}"
+    [[ -n "$(printf '%s' "$value" | tr -d '[:space:]')" ]]
+}
+
+json_string_field_present_and_nonempty_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+    local value=""
+
+    value="$(extract_json_string_field_from_text "$source_text" "$key" || true)"
+    string_has_nonwhitespace "$value"
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -2989,22 +3226,13 @@ tool_call_has_missing_required_arguments() {
 
     case "$tool_name" in
         memory_search)
-            ! jq -e '
-                (. // {}) as $args
-                | (($args.query? // "") | tostring | gsub("\\s+"; "") | length) > 0
-            ' >/dev/null 2>&1 <<<"$arguments_json"
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "query"
             ;;
         exec)
-            ! jq -e '
-                (. // {}) as $args
-                | (($args.command? // "") | tostring | gsub("\\s+"; "") | length) > 0
-            ' >/dev/null 2>&1 <<<"$arguments_json"
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "command"
             ;;
         cron)
-            ! jq -e '
-                (. // {}) as $args
-                | (($args.action? // "") | tostring | gsub("\\s+"; "") | length) > 0
-            ' >/dev/null 2>&1 <<<"$arguments_json"
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
             ;;
         *)
             return 1
@@ -3132,19 +3360,23 @@ tool_calls_only_tavily_allowlisted() {
 
 tool_calls_include_missing_required_arguments() {
     local tool_calls_json="${1:-}"
+    local tool_call_json=""
+    local nested_tool_name=""
+    local nested_arguments_json=""
 
     [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
 
-    jq -e '
-        any(.[]?;
-            (.arguments // {}) as $args
-            | (
-                (.name == "memory_search" and ((($args.query? // "") | tostring | gsub("\\s+"; "") | length) == 0))
-                or (.name == "exec" and ((($args.command? // "") | tostring | gsub("\\s+"; "") | length) == 0))
-                or (.name == "cron" and ((($args.action? // "") | tostring | gsub("\\s+"; "") | length) == 0))
-            )
-        )
-    ' >/dev/null 2>&1 <<<"$tool_calls_json"
+    while IFS= read -r tool_call_json; do
+        [[ -n "$tool_call_json" ]] || continue
+        nested_tool_name="$(extract_json_string_field_from_text "$tool_call_json" "name" || true)"
+        [[ -n "$nested_tool_name" ]] || continue
+        nested_arguments_json="$(extract_json_object_field_from_text "$tool_call_json" "arguments" || true)"
+        if tool_call_has_missing_required_arguments "$nested_tool_name" "${nested_arguments_json:-}"; then
+            return 0
+        fi
+    done < <(extract_json_objects_from_array "$tool_calls_json" || true)
+
+    return 1
 }
 
 emit_modified_payload() {
