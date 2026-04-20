@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-04-15
-**Total Lessons**: 83
+**Generated**: 2026-04-20
+**Total Lessons**: 84
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (39 lessons)
+#### P1 (40 lessons)
+- [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
@@ -185,7 +186,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (4 lessons)
+#### product (5 lessons)
+- [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
 - [Telegram codex-update direct fastpath raced underlying run](../docs/rca/2026-04-14-telegram-codex-update-direct-fastpath-raced-underlying-run.md)
@@ -210,15 +212,15 @@
 
 ### Popular Tags
 
-- `rca` (31 lessons)
+- `rca` (32 lessons)
 - `moltis` (26 lessons)
-- `telegram` (20 lessons)
+- `telegram` (21 lessons)
 - `deploy` (19 lessons)
 - `github-actions` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
+- `skills` (12 lessons)
 - `beads` (12 lessons)
-- `skills` (11 lessons)
 - `process` (9 lessons)
 
 
@@ -228,10 +230,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 83 |
-| Critical (P0/P1) | 40 |
+| Total Lessons | 84 |
+| Critical (P0/P1) | 41 |
 | Categories | 8 |
-| Unique Tags | 164 |
+| Unique Tags | 165 |
 
 ---
 
