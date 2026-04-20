@@ -6,6 +6,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_DEV="$PROJECT_ROOT/docker-compose.yml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 MOLTIS_IMAGE_PREFIX="ghcr.io/moltis-org/moltis:"
+EXPLICIT_GHCR_TAG_REGEX='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
 
 usage() {
     cat <<'EOF'
@@ -14,6 +15,8 @@ Usage: scripts/moltis-version.sh {version|image|assert-tracked}
 Commands:
   version         Print the tracked Moltis version from compose files
   image           Print the tracked Moltis image reference from compose files
+  normalize-tag   Normalize a release tag into an explicit GHCR runtime tag
+                  (for example: v0.10.18 -> 0.10.18)
   assert-tracked  Fail unless docker-compose.yml and docker-compose.prod.yml
                   resolve to the same pinned Moltis image (not latest)
 EOF
@@ -104,9 +107,8 @@ tracked_moltis_version() {
     printf '%s\n' "${image_ref#${MOLTIS_IMAGE_PREFIX}}"
 }
 
-assert_tracked_contract() {
-    local version
-    version="$(tracked_moltis_version)"
+assert_explicit_release_tag() {
+    local version="${1:-}"
 
     if [[ -z "$version" ]]; then
         echo "Tracked Moltis version is empty" >&2
@@ -119,15 +121,33 @@ assert_tracked_contract() {
     fi
 
     if [[ "$version" == v* ]]; then
-        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 0.10.18)" >&2
+        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 0.10.18 or 20260420.02)" >&2
         return 1
     fi
 
-    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
-        echo "Tracked Moltis version is not a valid explicit release tag: $version" >&2
+    if [[ ! "$version" =~ $EXPLICIT_GHCR_TAG_REGEX ]]; then
+        echo "Tracked Moltis version is not a valid explicit GHCR release tag: $version" >&2
+        return 1
+    fi
+}
+
+normalize_release_tag() {
+    local raw_tag="${1:-}"
+    local normalized_tag="${raw_tag#v}"
+
+    if [[ -z "$raw_tag" ]]; then
+        echo "Release tag is empty" >&2
         return 1
     fi
 
+    assert_explicit_release_tag "$normalized_tag"
+    printf '%s\n' "$normalized_tag"
+}
+
+assert_tracked_contract() {
+    local version
+    version="$(tracked_moltis_version)"
+    assert_explicit_release_tag "$version"
 }
 
 main() {
@@ -141,6 +161,10 @@ main() {
         image)
             assert_tracked_contract
             tracked_moltis_image_ref
+            ;;
+        normalize-tag)
+            shift
+            normalize_release_tag "${1:-}"
             ;;
         assert-tracked)
             assert_tracked_contract

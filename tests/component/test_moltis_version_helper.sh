@@ -84,6 +84,26 @@ run_component_moltis_version_helper_tests() {
         test_fail "Helper should normalize quoted compose image lines, comments, and ${MOLTIS_VERSION-...} defaults"
     fi
 
+    test_start "component_moltis_version_helper_accepts_calendar_release_tags"
+    local calendar_main calendar_prod calendar_version calendar_image normalized_calendar
+    calendar_main="${project_dir}/docker-compose.yml"
+    calendar_prod="${project_dir}/docker-compose.prod.yml"
+    write_compose_fixture "$calendar_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-20260420.02}'
+    write_compose_fixture "$calendar_prod" 'ghcr.io/moltis-org/moltis:20260420.02'
+
+    calendar_version="$("$helper_copy" version)"
+    calendar_image="$("$helper_copy" image)"
+    normalized_calendar="$("$helper_copy" normalize-tag "v20260420.02")"
+
+    if [[ "$calendar_version" == "20260420.02" ]] && \
+       [[ "$calendar_image" == "ghcr.io/moltis-org/moltis:20260420.02" ]] && \
+       [[ "$normalized_calendar" == "20260420.02" ]] && \
+       "$helper_copy" assert-tracked >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Helper should accept explicit calendar-style GHCR tags and normalize matching release tags with a leading v"
+    fi
+
     test_start "component_moltis_version_helper_rejects_non_defaulted_variable"
     local variable_main variable_prod
     variable_main="${project_dir}/docker-compose.yml"
