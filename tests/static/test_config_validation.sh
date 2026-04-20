@@ -395,6 +395,28 @@ run_static_config_validation_tests() {
         test_fail "telegram-chat-probe skill must point to an existing executable wrapper that is tracked in scripts/manifest.json, delegates to telegram-user-probe.py, and maps missing real-user env to precondition_failed"
     fi
 
+    test_start "static_scripts_manifest_covers_all_top_level_shell_entrypoints"
+    if python3 - "$PROJECT_ROOT/scripts" "$SCRIPTS_MANIFEST" <<'PY'
+import json
+import pathlib
+import sys
+
+scripts_dir = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text())
+manifest_scripts = set(manifest.get("scripts", {}).keys())
+repo_entrypoints = {path.name for path in scripts_dir.glob("*.sh")}
+missing = sorted(repo_entrypoints - manifest_scripts)
+if missing:
+    print("\n".join(missing))
+    raise SystemExit(1)
+PY
+    then
+        test_pass
+    else
+        test_fail "Every top-level scripts/*.sh entrypoint must be tracked in scripts/manifest.json so CI catches manifest drift before push-to-main deploy"
+    fi
+
     test_start "static_repo_managed_skills_define_telegram_safe_skill_detail_contract"
     if [[ -f "$TELEGRAM_LEARNER_SKILL" ]] && \
        [[ -f "$OPENCLAW_IMPROVEMENT_LEARNER_SKILL" ]] && \
