@@ -3161,6 +3161,95 @@ EOF
         test_fail "MessageSending guard must rewrite codex-update skill-detail failures into a clean Telegram-safe summary instead of falling back to operator-heavy description text"
     fi
 
+    test_start "component_before_llm_guard_hard_overrides_codex_update_maintenance_turn"
+    local before_llm_codex_update_maintenance_output
+    before_llm_codex_update_maintenance_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-codex-update-maintenance-before)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-update-maintenance-before","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872995 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай починим codex-update: в Telegram течёт Activity log и missing 'query' parameter"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe maintenance hard override")' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
+       jq -e '.data.messages[0].content | contains("не чиню и не отлаживаю `codex-update`")' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must terminalize codex-update maintenance/debug turns into a deterministic text-only boundary reply"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_codex_update_maintenance_leak_into_boundary_reply"
+    local codex_update_maintenance_intent_dir codex_update_maintenance_message_output
+    codex_update_maintenance_intent_dir="$(secure_temp_dir telegram-safe-codex-update-maintenance-message)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_update_maintenance_intent_dir" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:codex-update-maintenance-message","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872995 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай починим codex-update: в Telegram течёт Activity log и missing 'query' parameter"}],"tool_count":37,"iteration":1}}
+EOF
+    codex_update_maintenance_message_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_update_maintenance_intent_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codex-update-maintenance-message","data":{"account_id":"moltis-bot","to":"262872995","reply_to_message_id":965,"text":"Если хочешь, я сразу напишу готовую новую версию инструкции для скилла, где будет: проверка официальной версии.\n\n📋 Activity log\n• 💻 Running: `sed -n '1,220p' /home/moltis/.moltis/skills/codex-update/SKILL.md`\n• 🧠 Searching memory...\n• ❌ missing 'command' parameter\n• ❌ missing 'query' parameter"}} 
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.text | contains("не чиню и не отлаживаю `codex-update`")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.text | contains("create_skill/update_skill/delete_skill")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.text | contains("web UI/операторской сессии")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.reply_to_message_id == 965' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.text | test("Activity log|Running:|Searching memory|missing '\''command'\'' parameter|missing '\''query'\'' parameter|SKILL.md|/home/moltis") | not' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite leaked codex-update maintenance/debug runtime chatter into the deterministic Telegram-safe boundary reply"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_plain_skill_maintenance_runtime_failure"
+    local skill_maintenance_intent_dir skill_maintenance_plain_message_output
+    skill_maintenance_intent_dir="$(secure_temp_dir telegram-safe-skill-maintenance-plain)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_maintenance_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skill-maintenance-plain","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872996 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Почини навык post-close-task-classifier: в ответе течёт Activity log и сырые tool errors"}],"tool_count":37,"iteration":1}}
+EOF
+    skill_maintenance_plain_message_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_maintenance_intent_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:skill-maintenance-plain","data":{"account_id":"moltis-bot","to":"262872996","reply_to_message_id":966,"text":"Я бы хотел сначала открыть SKILL.md и посмотреть внутренние логи, но вызов exec сейчас сам падает с missing 'command' parameter, поэтому без runtime-диагностики я не починю этот навык."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.text | contains("навык `post-close-task-classifier`")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.text | contains("create_skill/update_skill/delete_skill")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.text | contains("web UI/операторской сессии")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.reply_to_message_id == 966' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.text | test("Activity log|missing '\''command'\'' parameter|SKILL.md|exec|/home/moltis") | not' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite plain skill-maintenance runtime failures even when the leaked text no longer includes an explicit Activity log block"
+    fi
+
+    test_start "component_after_llm_guard_keeps_explicit_update_skill_flow_out_of_maintenance_bucket"
+    local after_llm_update_skill_control_output
+    after_llm_update_skill_control_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:update-skill-control","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872997 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Обнови навык codex-update: замени description на более краткий advisory"}],"text":"Сейчас обновлю навык через update_skill без filesystem-проб.","tool_calls":[{"name":"update_skill","arguments":{"name":"codex-update","description":"Более краткий advisory"}}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_llm_update_skill_control_output" && \
+       jq -e '.data.text == "Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом."' >/dev/null 2>&1 <<<"$after_llm_update_skill_control_output" && \
+       jq -e '.data.text | contains("не чиню и не отлаживаю") | not' >/dev/null 2>&1 <<<"$after_llm_update_skill_control_output"; then
+        test_pass
+    else
+        test_fail "Explicit update_skill CRUD turns must keep the allowlisted skill-authoring flow and must not be rewritten as maintenance/debug"
+    fi
+
     test_start "component_after_llm_guard_rewrites_codex_update_scheduler_question_into_remote_safe_contract_reply"
     local codex_update_scheduler_after_output
     codex_update_scheduler_after_output="$(
