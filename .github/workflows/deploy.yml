@@ -397,10 +397,10 @@ jobs:
             exit 0
           fi
 
-          REMOTE_VERSION="${REMOTE_IMAGE##*:}"
+          REMOTE_VERSION_RAW="${REMOTE_IMAGE##*:}"
 
-          if [[ ! "$REMOTE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
-            echo "::warning::Running Moltis image uses non-semver tag '$REMOTE_VERSION'; skipping version regression guard."
+          if ! REMOTE_VERSION="$(bash ./scripts/moltis-version.sh normalize-tag "$REMOTE_VERSION_RAW" 2>/dev/null)"; then
+            echo "::warning::Running Moltis image uses unsupported explicit tag '$REMOTE_VERSION_RAW'; skipping version regression guard."
             exit 0
           fi
 

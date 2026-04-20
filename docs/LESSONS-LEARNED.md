@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-20
-**Total Lessons**: 84
+**Total Lessons**: 85
 
 ---
 
@@ -14,8 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (40 lessons)
+#### P1 (41 lessons)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
+- [GitHub Actions bad logs from post-deploy image prune and calendar tag rejection](../docs/rca/2026-04-20-github-actions-bad-logs-from-post-deploy-image-prune-and-calendar-tag-rejection.md)
 - [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
@@ -109,7 +110,8 @@
 ### By Category
 
 
-#### cicd (29 lessons)
+#### cicd (30 lessons)
+- [GitHub Actions bad logs from post-deploy image prune and calendar tag rejection](../docs/rca/2026-04-20-github-actions-bad-logs-from-post-deploy-image-prune-and-calendar-tag-rejection.md)
 - [Deploy host automation missing cron package bootstrap](../docs/rca/2026-04-14-deploy-host-automation-missing-cron-package-bootstrap.md)
 - [Tracked deploy empty stdout broke GitHub Actions JSON contract](../docs/rca/2026-04-02-tracked-deploy-empty-stdout-broke-json-contract.md)
 - [Tracked Moltis deploy failed because the repo skill sync helper crashed in its EXIT trap under set -u](../docs/rca/2026-03-28-moltis-repo-skill-sync-trap-broke-deploy-verification.md)
@@ -213,10 +215,10 @@
 ### Popular Tags
 
 - `rca` (32 lessons)
-- `moltis` (26 lessons)
+- `moltis` (27 lessons)
 - `telegram` (21 lessons)
-- `deploy` (19 lessons)
-- `github-actions` (17 lessons)
+- `deploy` (20 lessons)
+- `github-actions` (18 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
 - `skills` (12 lessons)
@@ -230,10 +232,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 84 |
-| Critical (P0/P1) | 41 |
+| Total Lessons | 85 |
+| Critical (P0/P1) | 42 |
 | Categories | 8 |
-| Unique Tags | 165 |
+| Unique Tags | 166 |
 
 ---
 

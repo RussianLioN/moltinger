@@ -14,6 +14,7 @@ DEPLOY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy.yml"
 DEPLOY_STATUS_NOTIFY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-status-notify.yml"
 DEPLOY_STALL_WATCHDOG_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-stall-watchdog.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
+MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT="$PROJECT_ROOT/scripts/moltis-update-proposal-resolver.sh"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
@@ -553,10 +554,11 @@ run_static_config_validation_tests() {
        rg -Fq 'prepare_moltis_browser_sandbox_image()' "$DEPLOY_SCRIPT" && \
        rg -q 'docker build \\' "$DEPLOY_SCRIPT" && \
        rg -Fq 'scripts/moltis-browser-sandbox/Dockerfile' "$DEPLOY_SCRIPT" && \
+       rg -Fq -- '--skip-docker-image-prune' "$DEPLOY_SCRIPT" && \
        rg -Fq 'DOCKER_SOCKET_GID' "$DEPLOY_SCRIPT"; then
         test_pass
     else
-        test_fail "Runtime attestation and deploy control plane must guard browser sandbox image availability, docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
+        test_fail "Runtime attestation and deploy control plane must guard browser sandbox image availability, keep post-deploy reclaim from pruning the tracked sandbox image before attestation completes, preserve docker.sock access, host-gateway routing, writable browser profile storage, and single-instance non-persistent browser concurrency before production traffic hits Telegram"
     fi
 
     test_start "static_moltis_identity_degrades_tool_heavy_telegram_paths"
@@ -604,7 +606,9 @@ run_static_config_validation_tests() {
     test_start "static_moltis_version_contract_stays_git_tracked_and_pinned"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] && \
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != v* ]] && \
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
         test_pass
     else
         test_fail "Tracked Moltis version must resolve to an explicit GHCR tag without leading v and be validated by scripts/moltis-version.sh"
@@ -687,6 +691,13 @@ run_static_config_validation_tests() {
         test_pass
     else
         test_fail "Production Moltis container must receive OLLAMA_API_KEY so cloud-backed Ollama chat models can appear in the runtime provider catalog"
+    fi
+
+    test_start "static_active_moltis_deploy_surface_has_no_glm_secret_contract"
+    if ! rg -q 'GLM_API_KEY|GLM_API_KEY_FILE|glm_api_key' "$PROJECT_ROOT/docker-compose.yml" "$COMPOSE_PROD" "$PREFLIGHT_SCRIPT" "$MOLTIS_ENV_RENDER_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Active Moltis deploy surface must not require legacy GLM secrets once GitHub-rendered runtime uses GPT-5.4 OAuth + Ollama cloud fallback only"
     fi
 
     test_start "static_codex_cli_update_delivery_script_is_executable"
@@ -1376,6 +1387,7 @@ run_static_config_validation_tests() {
 
     test_start "static_moltis_update_proposal_workflow_is_safe_and_non_deploying"
     if [[ -f "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" ]] && \
+       [[ -x "$MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT" ]] && \
        rg -q '^name: Moltis Update Proposal$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  schedule:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  workflow_dispatch:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
@@ -1384,7 +1396,8 @@ run_static_config_validation_tests() {
        rg -q 'group: moltis-update-proposal' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'scripts/moltis-version\.sh version' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'gh api repos/moltis-org/moltis/releases/latest' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -q 'docker manifest inspect "ghcr\.io/moltis-org/moltis:' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'scripts/moltis-update-proposal-resolver\.sh' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'docker manifest inspect' "$MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT" && \
        rg -q 'gh pr create --base main' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        ! rg -q 'gh workflow run "Deploy Moltis"|deploy\.sh --json moltis deploy|docker compose -f docker-compose\.prod\.yml up -d moltis' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
         test_pass

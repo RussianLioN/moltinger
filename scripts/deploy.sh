@@ -1604,6 +1604,7 @@ run_post_deploy_storage_reclaim() {
         if ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
             "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
                 --ignore-deploy-mutex \
+                --skip-docker-image-prune \
                 --skip-journal-vacuum 1>&2; then
             log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
             return 0
@@ -1611,6 +1612,7 @@ run_post_deploy_storage_reclaim() {
     elif ! MOLTIS_STORAGE_KEEP_PREDEPLOY_BACKUPS="$POST_DEPLOY_STORAGE_KEEP_PREDEPLOY_BACKUPS" \
         "$STORAGE_MAINTENANCE_SCRIPT" reclaim \
             --ignore-deploy-mutex \
+            --skip-docker-image-prune \
             --skip-journal-vacuum; then
         log_warn "Post-deploy storage reclaim reported warnings; continuing because rollout is already healthy"
         return 0

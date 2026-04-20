@@ -164,6 +164,7 @@ suite_entries_for_lane() {
             printf '%s\n' \
                 "bash|component_backup_restore_readiness|Backup restore-readiness component|$SCRIPT_DIR/component/test_backup_restore_readiness.sh" \
                 "bash|component_moltis_version_helper|Moltis version helper component|$SCRIPT_DIR/component/test_moltis_version_helper.sh" \
+                "bash|component_moltis_update_proposal_resolver|Moltis update proposal resolver component|$SCRIPT_DIR/component/test_moltis_update_proposal_resolver.sh" \
                 "bash|component_prepare_moltis_runtime_config|Prepare Moltis runtime config component|$SCRIPT_DIR/component/test_prepare_moltis_runtime_config.sh" \
                 "bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/test_circuit_breaker.sh" \
                 "bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh" \

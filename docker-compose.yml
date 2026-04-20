@@ -88,15 +88,12 @@ services:
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       # Tavily API for MCP server
       TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
-      # GLM-5.1 API key for official BigModel Coding Plan (OpenAI-compatible)
-      GLM_API_KEY_FILE: /run/secrets/glm_api_key
 
     # Docker secrets for secure credential management
     secrets:
       - moltis_password
       - telegram_bot_token
       - tavily_api_key
-      - glm_api_key
 
     healthcheck:
       <<: *healthcheck
@@ -144,8 +141,6 @@ secrets:
     file: ./secrets/telegram_bot_token.txt
   tavily_api_key:
     file: ./secrets/tavily_api_key.txt
-  glm_api_key:
-    file: ./secrets/glm_api_key.txt
 
 # ============================================================================
 # NETWORKS
