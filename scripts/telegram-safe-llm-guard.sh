@@ -2045,6 +2045,11 @@ build_skill_maintenance_reply_text() {
         return 0
     fi
 
+    if [[ "$target_kind" == "generic" ]]; then
+        printf '%s' 'В Telegram-safe режиме я не провожу repair/debug/log inspection через внутренние инструменты, логи и чтение файлов. Если нужна простая правка навыка, дай явную команду create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+        return 0
+    fi
+
     if [[ -n "$skill_name" && "$skill_name" != "generic" ]]; then
         printf 'В Telegram-safe режиме я не чиню и не отлаживаю навык `%s` через внутренние инструменты, логи и чтение файлов. Для простой правки скажи явно create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.' "$skill_name"
         return 0
@@ -3734,7 +3739,7 @@ if [[ "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_fl
     current_turn_codex_update_scheduler_request=true
     current_turn_codex_update_request=true
 fi
-if [[ "$current_turn_codex_update_request" != true && "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(обновлен|обновлени|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового|новой|новая|новую|changelog|release notes)'; then
+if [[ "$current_turn_codex_update_request" != true && "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(обнови|обновить|обновлен|обновлени|upgrade|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового|новой|новая|новую|changelog|release notes)'; then
     current_turn_codex_update_request=true
 fi
 
@@ -3844,6 +3849,7 @@ fi
 persisted_codex_update_request=false
 persisted_codex_update_scheduler_request=false
 persisted_codex_update_maintenance_request=false
+persisted_generic_maintenance_request=false
 case "${persisted_turn_intent:-}" in
     codex_update)
         persisted_codex_update_request=true
@@ -3854,6 +3860,9 @@ case "${persisted_turn_intent:-}" in
         ;;
     codex_update_maintenance)
         persisted_codex_update_maintenance_request=true
+        ;;
+    maintenance_generic)
+        persisted_generic_maintenance_request=true
         ;;
 esac
 if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
@@ -3873,20 +3882,23 @@ elif printf '%s' "$intent_text_flat" | grep -Eiq '(навык|skills?|skill)'; t
 fi
 current_turn_skill_maintenance_request=false
 current_turn_codex_update_maintenance_request=false
+current_turn_generic_maintenance_request=false
 if [[ "$maintenance_request_detected" == true ]]; then
     if [[ "$codex_update_subject_request" == true ]]; then
         current_turn_codex_update_maintenance_request=true
     elif [[ "$skill_subject_request" == true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
         current_turn_skill_maintenance_request=true
         looks_like_skill_turn=true
+    elif [[ "$looks_like_status" != true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+        current_turn_generic_maintenance_request=true
     fi
 fi
-if [[ "$current_turn_skill_maintenance_request" == true || "$current_turn_codex_update_maintenance_request" == true ]]; then
+if [[ "$current_turn_skill_maintenance_request" == true || "$current_turn_codex_update_maintenance_request" == true || "$current_turn_generic_maintenance_request" == true ]]; then
     current_turn_codex_update_request=false
     current_turn_codex_update_scheduler_request=false
 fi
 if [[ "$current_turn_skill_detail_request" != true && "$looks_like_skill_turn" != true && -n "$requested_skill_reference_name" ]]; then
-    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_maintenance_request" != true ]]; then
+    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_maintenance_request" != true && "$current_turn_generic_maintenance_request" != true ]]; then
         current_turn_skill_detail_request=true
         looks_like_skill_turn=true
     fi
@@ -3982,6 +3994,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         next_turn_intent="skill_template"
     elif [[ "$current_turn_codex_update_maintenance_request" == true ]]; then
         next_turn_intent="codex_update_maintenance"
+    elif [[ "$current_turn_generic_maintenance_request" == true ]]; then
+        next_turn_intent="maintenance_generic"
     elif [[ "$current_turn_skill_maintenance_request" == true ]]; then
         next_turn_intent="skill_maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
     elif [[ "$current_turn_codex_update_request" == true ]]; then
@@ -4036,6 +4050,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     persisted_codex_update_request=false
     persisted_codex_update_scheduler_request=false
     persisted_codex_update_maintenance_request=false
+    persisted_generic_maintenance_request=false
     case "${persisted_turn_intent:-}" in
         codex_update)
             persisted_codex_update_request=true
@@ -4046,6 +4061,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             ;;
         codex_update_maintenance)
             persisted_codex_update_maintenance_request=true
+            ;;
+        maintenance_generic)
+            persisted_generic_maintenance_request=true
             ;;
     esac
 
@@ -4081,6 +4099,13 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         if [[ "$current_turn_codex_update_maintenance_request" == true ]]; then
             maintenance_reply_text="$(build_skill_maintenance_reply_text "codex_update" || true)"
             if [[ -n "$maintenance_reply_text" ]] && direct_fastpath_send_with_suppression "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:codex_update"; then
+                clear_turn_intent "${turn_session_key:-}"
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_generic_maintenance_request" == true ]]; then
+            maintenance_reply_text="$(build_skill_maintenance_reply_text "generic" || true)"
+            if [[ -n "$maintenance_reply_text" ]] && direct_fastpath_send_with_suppression "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:generic"; then
                 clear_turn_intent "${turn_session_key:-}"
                 exit 0
             fi
@@ -4161,13 +4186,19 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             emit_before_llm_modified_payload "$messages_json" 0
             exit 0
         fi
-        if [[ "$current_turn_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true ]]; then
-            maintenance_reply_text="$(build_skill_maintenance_reply_text "$([[ "$current_turn_codex_update_maintenance_request" == true ]] && printf 'codex_update' || printf 'skill')" "${resolved_skill_name:-${requested_skill_reference_name:-generic}}" || true)"
+        if [[ "$current_turn_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true || "$current_turn_generic_maintenance_request" == true ]]; then
+            maintenance_target_kind="skill"
+            if [[ "$current_turn_codex_update_maintenance_request" == true ]]; then
+                maintenance_target_kind="codex_update"
+            elif [[ "$current_turn_generic_maintenance_request" == true ]]; then
+                maintenance_target_kind="generic"
+            fi
+            maintenance_reply_text="$(build_skill_maintenance_reply_text "$maintenance_target_kind" "${resolved_skill_name:-${requested_skill_reference_name:-generic}}" || true)"
             if [[ -n "$maintenance_reply_text" ]]; then
                 maintenance_guard="$(build_skill_maintenance_hard_override_message "$maintenance_reply_text")"
                 maintenance_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
                 messages_json="[$(build_message_json system "$maintenance_guard"),$(build_message_json user "$maintenance_user")]"
-                write_audit_line "before_modify reason=maintenance_hard_override tool_count=0 skill=${resolved_skill_name:-${requested_skill_reference_name:-generic}} codex_update=$current_turn_codex_update_maintenance_request"
+                write_audit_line "before_modify reason=maintenance_hard_override tool_count=0 target=$maintenance_target_kind skill=${resolved_skill_name:-${requested_skill_reference_name:-generic}} codex_update=$current_turn_codex_update_maintenance_request"
                 emit_before_llm_modified_payload "$messages_json" 0
                 exit 0
             fi
@@ -4265,13 +4296,19 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
         exit 0
     fi
 
-    if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true || -n "$persisted_skill_maintenance_name" ]]; then
-        maintenance_reply_text="$(build_skill_maintenance_reply_text "$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf 'codex_update' || printf 'skill')" "${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}}" || true)"
+    if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true || -n "$persisted_skill_maintenance_name" || "$current_turn_generic_maintenance_request" == true || "$persisted_generic_maintenance_request" == true ]]; then
+        maintenance_target_kind="skill"
+        if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]]; then
+            maintenance_target_kind="codex_update"
+        elif [[ "$current_turn_generic_maintenance_request" == true || "$persisted_generic_maintenance_request" == true ]]; then
+            maintenance_target_kind="generic"
+        fi
+        maintenance_reply_text="$(build_skill_maintenance_reply_text "$maintenance_target_kind" "${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}}" || true)"
         if [[ -z "$maintenance_reply_text" ]]; then
             maintenance_reply_text='В Telegram-safe режиме debug/repair ход уже переведён в текстовый ответ без инструментов.'
         fi
         synthetic_command="$(build_exec_heredoc_command "$maintenance_reply_text")"
-        write_audit_line "emit_modify event=$event reason=maintenance_tool_suppress tool=${tool_name:-missing} skill=${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}} codex_update=$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf true || printf false)"
+        write_audit_line "emit_modify event=$event reason=maintenance_tool_suppress tool=${tool_name:-missing} target=$maintenance_target_kind skill=${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}} codex_update=$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf true || printf false)"
         emit_before_tool_modified_payload "exec" "{\"command\":\"$(json_escape "$synthetic_command")\"}"
         exit 0
     fi
@@ -4349,10 +4386,16 @@ if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$
 fi
 
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
-    if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true || -n "$persisted_skill_maintenance_name" ]]; then
-        maintenance_reply_text="$(build_skill_maintenance_reply_text "$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf 'codex_update' || printf 'skill')" "${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}}" || true)"
+    if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true || "$current_turn_skill_maintenance_request" == true || -n "$persisted_skill_maintenance_name" || "$current_turn_generic_maintenance_request" == true || "$persisted_generic_maintenance_request" == true ]]; then
+        maintenance_target_kind="skill"
+        if [[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]]; then
+            maintenance_target_kind="codex_update"
+        elif [[ "$current_turn_generic_maintenance_request" == true || "$persisted_generic_maintenance_request" == true ]]; then
+            maintenance_target_kind="generic"
+        fi
+        maintenance_reply_text="$(build_skill_maintenance_reply_text "$maintenance_target_kind" "${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}}" || true)"
         if [[ -n "$maintenance_reply_text" ]]; then
-            write_audit_line "emit_modify event=$event reason=maintenance_reply_override skill=${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}} codex_update=$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf true || printf false)"
+            write_audit_line "emit_modify event=$event reason=maintenance_reply_override target=$maintenance_target_kind skill=${resolved_skill_name:-${requested_skill_reference_name:-${persisted_skill_maintenance_name:-generic}}} codex_update=$([[ "$current_turn_codex_update_maintenance_request" == true || "$persisted_codex_update_maintenance_request" == true ]] && printf true || printf false)"
             if [[ "$event" == "AfterLLMCall" ]]; then
                 emit_modified_payload "$maintenance_reply_text" true
             else
@@ -4412,7 +4455,7 @@ if [[ "$event" == "MessageSending" && "$is_telegram_safe_lane" == true && "$look
     fi
 fi
 
-if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$current_turn_skill_detail_request" != true && "$current_turn_skill_maintenance_request" != true && "$current_turn_codex_update_maintenance_request" != true && -z "$persisted_skill_detail_name" && -z "$persisted_skill_maintenance_name" && -z "$persisted_skill_create_state" && "$persisted_codex_update_maintenance_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
+if [[ "$event" == "MessageSending" && "$looks_like_status" != true && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$current_turn_skill_detail_request" != true && "$current_turn_skill_maintenance_request" != true && "$current_turn_codex_update_maintenance_request" != true && "$current_turn_generic_maintenance_request" != true && -z "$persisted_skill_detail_name" && -z "$persisted_skill_maintenance_name" && -z "$persisted_skill_create_state" && "$persisted_codex_update_maintenance_request" != true && "$persisted_generic_maintenance_request" != true && "$has_delivery_internal_telemetry" != true && "$has_after_llm_tool_intent" != true && "$has_user_visible_internal_planning" != true && "$has_skill_path_false_negative" != true && "$has_skill_visibility_generic_mismatch" != true ]]; then
     exit 0
 fi
 if [[ "$looks_like_status" == true ]]; then

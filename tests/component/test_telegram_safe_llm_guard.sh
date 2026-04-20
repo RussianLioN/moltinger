@@ -3171,12 +3171,91 @@ EOF
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
        jq -e '.data.messages[0].content | contains("Telegram-safe maintenance hard override")' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
        jq -e '.data.messages[0].content | contains("не чиню и не отлаживаю `codex-update`")' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output" && \
        jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_codex_update_maintenance_output"; then
         test_pass
     else
         test_fail "BeforeLLMCall guard must terminalize codex-update maintenance/debug turns into a deterministic text-only boundary reply"
+    fi
+
+    test_start "component_before_llm_guard_hard_overrides_generic_maintenance_turn_without_explicit_subject"
+    local before_llm_generic_maintenance_output
+    before_llm_generic_maintenance_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-generic-maintenance-before)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:generic-maintenance-before","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872998 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Посмотри логи и найди root cause, там снова Activity log и missing 'query' parameter"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe maintenance hard override")' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output" && \
+       jq -e '.data.messages[0].content | contains("не провожу repair/debug/log inspection")' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_generic_maintenance_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must fail-close generic log/root-cause maintenance turns even when the user omitted an explicit skill or codex-update subject"
+    fi
+
+    test_start "component_before_llm_guard_direct_fastpaths_codex_update_maintenance_when_enabled"
+    local fastpath_maintenance_tmp fastpath_maintenance_send_script fastpath_maintenance_log fastpath_maintenance_stdout fastpath_maintenance_stderr fastpath_maintenance_status fastpath_maintenance_intent_dir fastpath_maintenance_suppress_file
+    fastpath_maintenance_tmp="$(secure_temp_dir telegram-safe-fastpath-maintenance)"
+    fastpath_maintenance_send_script="$fastpath_maintenance_tmp/send.sh"
+    fastpath_maintenance_log="$fastpath_maintenance_tmp/send.log"
+    fastpath_maintenance_intent_dir="$fastpath_maintenance_tmp/intent"
+    fastpath_maintenance_suppress_file="$fastpath_maintenance_intent_dir/session_fastmaintenance.suppress"
+    cat >"$fastpath_maintenance_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_maintenance_send_script"
+    fastpath_maintenance_stdout="$fastpath_maintenance_tmp/stdout.log"
+    fastpath_maintenance_stderr="$fastpath_maintenance_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_maintenance_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_maintenance_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_maintenance_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_maintenance_stdout" 2>"$fastpath_maintenance_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastmaintenance","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872999 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай починим codex-update: в Telegram течёт Activity log и missing 'query' parameter"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_maintenance_status=$?
+    set -e
+    if [[ "$fastpath_maintenance_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_maintenance_stdout" ]] && \
+       [[ ! -s "$fastpath_maintenance_stderr" ]] && \
+       [[ -f "$fastpath_maintenance_suppress_file" ]] && \
+       grep -Fq $'\tmaintenance:codex_update' "$fastpath_maintenance_suppress_file" && \
+       grep -Fq 'chat_id=262872999' "$fastpath_maintenance_log" && \
+       grep -Fq 'text=В Telegram-safe режиме я не чиню и не отлаживаю `codex-update`' "$fastpath_maintenance_log"; then
+        test_pass
+    else
+        test_fail "Direct maintenance fastpath must send the deterministic codex-update boundary reply and store only a delivery-suppression marker"
     fi
 
     test_start "component_message_sending_guard_rewrites_codex_update_maintenance_leak_into_boundary_reply"
@@ -3231,6 +3310,23 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must rewrite plain skill-maintenance runtime failures even when the leaked text no longer includes an explicit Activity log block"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_codex_update_maintenance_leak_into_boundary_reply"
+    local codex_update_maintenance_after_output
+    codex_update_maintenance_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:codex-update-maintenance-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262873000 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Давай починим codex-update: в Telegram течёт Activity log и missing 'query' parameter"}],"text":"Сейчас посмотрю логи и открою SKILL.md, потому что exec и memory_search падают с missing 'command' parameter и missing 'query' parameter.","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_maintenance_after_output" && \
+       jq -e '.data.text | contains("не чиню и не отлаживаю `codex-update`")' >/dev/null 2>&1 <<<"$codex_update_maintenance_after_output" && \
+       jq -e '.data.text | contains("web UI/операторской сессии")' >/dev/null 2>&1 <<<"$codex_update_maintenance_after_output" && \
+       jq -e '.data.text | test("Activity log|SKILL.md|missing '\''command'\'' parameter|missing '\''query'\'' parameter") | not' >/dev/null 2>&1 <<<"$codex_update_maintenance_after_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite codex-update maintenance/debug chatter into the deterministic Telegram-safe boundary reply before final delivery"
     fi
 
     test_start "component_after_llm_guard_keeps_explicit_update_skill_flow_out_of_maintenance_bucket"
