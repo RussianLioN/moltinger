@@ -50,8 +50,8 @@ EOF
        [[ "$(jq -r '.tracked.memory.provider_pinned' "$output_json")" != "false" ]] || \
        [[ "$(jq -r '.runtime_log_signals.tavily.mcp_sse_handshake_failures' "$output_json")" != "1" ]] || \
        [[ "$(jq -r '.runtime_log_signals.tavily.mcp_auto_restart_failures' "$output_json")" != "1" ]] || \
-       [[ "$(jq -r '.runtime_log_signals.memory.openai_embeddings_400' "$output_json")" != "1" ]] || \
-       [[ "$(jq -r '.runtime_log_signals.memory.groq_embeddings_401' "$output_json")" != "1" ]] || \
+       [[ "$(jq -r '.runtime_log_signals.memory.legacy_bigmodel_embeddings_400' "$output_json")" != "1" ]] || \
+       [[ "$(jq -r '.runtime_log_signals.memory.legacy_groq_embeddings_401' "$output_json")" != "1" ]] || \
        [[ "$(jq -r '.risk_summary.tavily_transport_unstable' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.risk_summary.memory_provider_autodetect' "$output_json")" != "true" ]] || \
        [[ "$(jq -r '.risk_summary.memory_embedding_provider_failures_present' "$output_json")" != "true" ]]; then

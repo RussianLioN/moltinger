@@ -13,9 +13,9 @@
 │                    VALUE FOR AI AGENT FACTORY                           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  CRITICAL        moltinger-xh7: Fallback LLM Provider                  │
-│  (blocks work)   → If GLM-5 fails, Moltis continues                    │
-│                  → Groq (free) or Anthropic as backup                  │
+│  CRITICAL        moltinger-xh7: Fallback LLM hardening                 │
+│  (blocks work)   → If GPT-5.4 OAuth is unavailable, Moltis continues   │
+│                  → Ollama cloud fallback only                          │
 │                                                                         │
 │  HIGH            moltinger-sjx: S3 Offsite Backup                      │
 │  (data safety)   → Disaster recovery                                   │
@@ -40,7 +40,7 @@
 
 | # | Task ID | Task | Time | Dependencies | Why |
 |---|---------|------|------|--------------|-----|
-| **1** | `moltinger-xh7` | Fallback LLM Provider | 30-60m | API key for Groq/Anthropic | Critical - Moltis doesn't work without LLM |
+| **1** | `moltinger-xh7` | Fallback LLM hardening | 30-60m | OLLAMA_API_KEY (optional cloud access) | Critical - Moltis doesn't work without LLM |
 | **2** | `moltinger-sjx` | S3 Offsite Backup | 45-60m | S3 credentials | Data protection - disaster recovery |
 | **3** | `moltinger-r8r` | Traefik Rate Limiting | 20-30m | None | Quick win - abuse protection |
 | **4** | `moltinger-j22` | AlertManager Receivers | 30-45m | Slack webhook / Telegram bot | Operations - incident notifications |
@@ -91,7 +91,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")/.."      # = moltinger/tests/..
 - [ ] **T-TEST-007**: Добав upload test results artifact
 
 #### Phase C: Test Coverage for Fallback LLM (P2)
-- [ ] **T-TEST-008**: Добавить тест GLM →Ollama failover в `test_llm_failover.sh`
+- [ ] **T-TEST-008**: Добавить тест GPT-5.4 OAuth → Ollama cloud failover в `test_llm_failover.sh`
 - [ ] **T-TEST-009**: Добавить тест Ollama recovery (HALF-OPEN → CLOSED)
 - [ ] **T-TEST-010**: Добавить тест Prometheus metrics при failover
 - [ ] **T-TEST-011**: Добавить E2E тест полного failover chain в `test_full_failover_chain.sh`

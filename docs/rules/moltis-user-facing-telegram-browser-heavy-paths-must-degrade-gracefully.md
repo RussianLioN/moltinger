@@ -15,11 +15,13 @@ Until browser/session closure is proven on the authoritative target:
    web UI/operator lane when the task would require browser automation or long tool chains.
 3. Treat `Activity log`, raw tool names, raw shell commands, or progress traces in Telegram as
    failures, not as acceptable degraded UX.
-4. Pin real user-facing Telegram accounts to a dedicated text-only provider lane
-   (`model_provider` + provider `tool_mode = "off"`) instead of letting them inherit the shared
-   tool-capable operator/runtime surface.
-5. Treat provider `tool_mode = "off"` as necessary but not sufficient. Verify with authoritative
-   UAT and session artifacts that the live Telegram turn did not execute tools anyway.
+4. Pin real user-facing Telegram accounts to the canonical guarded safe provider identity
+   (`model = openai-codex::gpt-5.4`, `model_provider = openai-codex`) and enforce no-tool delivery
+   semantics through the repo-owned Telegram-safe hook/guard layer instead of relying on a
+   dedicated `tool_mode = "off"` lane.
+5. Treat tracked provider identity as necessary but not sufficient. Verify with authoritative
+   UAT and session artifacts that the live Telegram turn did not execute tools anyway and that the
+   final delivery stayed on the exact safe-text contract.
 6. For Telegram `/status`, require a deterministic short text reply with the canonical
    Telegram-safe model contract and no tool calls.
 7. Do not recommend `Pair` as the default fix unless the evidence actually shows missing session

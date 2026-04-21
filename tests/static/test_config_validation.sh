@@ -15,6 +15,7 @@ DEPLOY_STATUS_NOTIFY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-status-not
 DEPLOY_STALL_WATCHDOG_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-stall-watchdog.yml"
 MOLTIS_UPDATE_PROPOSAL_WORKFLOW="$PROJECT_ROOT/.github/workflows/moltis-update-proposal.yml"
 MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT="$PROJECT_ROOT/scripts/moltis-update-proposal-resolver.sh"
+MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT="$PROJECT_ROOT/scripts/moltis-update-proposal-workflow.sh"
 CLAWDIY_WORKFLOW="$PROJECT_ROOT/.github/workflows/deploy-clawdiy.yml"
 UAT_GATE_WORKFLOW="$PROJECT_ROOT/.github/workflows/uat-gate.yml"
 FEATURE_DIAGNOSTICS_WORKFLOW="$PROJECT_ROOT/.github/workflows/feature-diagnostics.yml"
@@ -35,6 +36,8 @@ STORAGE_MAINTENANCE_SCRIPT="$PROJECT_ROOT/scripts/moltis-storage-maintenance.sh"
 STORAGE_MAINTENANCE_CRON="$PROJECT_ROOT/scripts/cron.d/moltis-storage-maintenance"
 HOST_AUTOMATION_SCRIPT="$PROJECT_ROOT/scripts/apply-moltis-host-automation.sh"
 DEPLOY_STALL_WATCHDOG_SCRIPT="$PROJECT_ROOT/scripts/deploy-stall-watchdog.sh"
+GITHUB_NOTIFICATION_DELIVERY_CHECK_SCRIPT="$PROJECT_ROOT/scripts/github-notification-delivery-check.sh"
+GITOPS_METRICS_WORKFLOW_SCRIPT="$PROJECT_ROOT/scripts/gitops-metrics-workflow.sh"
 HEALTH_MONITOR_SCRIPT="$PROJECT_ROOT/scripts/health-monitor.sh"
 HEALTH_MONITOR_UNIT="$PROJECT_ROOT/systemd/moltis-health-monitor.service"
 HEALTH_MONITOR_CONFIG_UNIT="$PROJECT_ROOT/config/systemd/moltis-health-monitor.service"
@@ -49,6 +52,7 @@ SYNC_SURFACE_SCRIPT="$PROJECT_ROOT/scripts/gitops-sync-managed-surface.sh"
 FEATURE_DIAGNOSTICS_SCRIPT="$PROJECT_ROOT/scripts/collect-feature-diagnostics.sh"
 PROD_MUTATION_GUARD_SCRIPT="$PROJECT_ROOT/scripts/prod-mutation-guard.sh"
 GITOPS_CHECK_SCRIPT="$PROJECT_ROOT/scripts/gitops-check-managed-surface.sh"
+PROVIDER_LIVE_SCRIPT="$PROJECT_ROOT/tests/live_external/test_provider_live.sh"
 SCRIPTS_MANIFEST="$PROJECT_ROOT/scripts/manifest.json"
 TELEGRAM_SAFE_HOOK_DIR="$PROJECT_ROOT/.moltis/hooks/telegram-safe-llm-guard"
 TELEGRAM_SAFE_HOOK_MANIFEST="$TELEGRAM_SAFE_HOOK_DIR/HOOK.md"
@@ -232,7 +236,7 @@ run_static_config_validation_tests() {
         test_fail "User-facing Telegram account must explicitly pin stream_mode = \"off\" so runtime defaults or per-account streaming features cannot leak internal activity/tool-progress into chat"
     fi
 
-    test_start "static_telegram_account_pins_text_only_safe_provider_lane"
+    test_start "static_telegram_account_pins_guarded_safe_provider_lane"
     if python3 -c "$(python_code \
         'import pathlib' \
         'import sys' \
@@ -259,7 +263,7 @@ run_static_config_validation_tests() {
     then
         test_pass
     else
-        test_fail "User-facing Telegram must pin a dedicated guarded provider lane so DM traffic keeps the safe provider identity while dedicated skill tools remain available"
+        test_fail "User-facing Telegram must keep the guarded safe provider identity pinned in tracked config while the repo-owned Telegram-safe guard enforces no-tool delivery semantics for DM traffic"
     fi
 
     test_start "static_telegram_safe_lane_registers_llm_guard_hook"
@@ -548,6 +552,7 @@ PY
 
     test_start "static_telegram_remote_uat_enforces_status_and_activity_semantics"
     if rg -Fq 'STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'STATUS_EXPECTED_PROVIDER="${STATUS_EXPECTED_PROVIDER:-openai-codex}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'MOLTIS_URL="$(resolve_moltis_url_default)"' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
@@ -555,6 +560,10 @@ PY
        rg -Fq 'semantic_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_pre_send_activity_leak' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'semantic_status_mismatch' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'Канал: Telegram (@moltinger_bot)' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'Режим: safe-text' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'expected_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
+       rg -Fq 'observed_reply' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq '*"mcp__"*' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'evaluate_authoritative_semantics' "$TELEGRAM_REMOTE_UAT_SCRIPT" && \
        rg -Fq 'MOLTIS_PASSWORD: ${{ secrets.MOLTIS_PASSWORD }}' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml" && \
@@ -562,7 +571,7 @@ PY
        rg -Fq 'export MOLTIS_URL=http://localhost:13131' "$PROJECT_ROOT/.github/workflows/telegram-e2e-on-demand.yml"; then
         test_pass
     else
-        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and /status model mismatches while defaulting local live /api/skills verification to the production domain, passing MOLTIS_PASSWORD through workflow dispatch, and preserving explicit localhost override in the remote workflow"
+        test_fail "Authoritative Telegram remote UAT must fail on verification gates, internal activity leaks, contaminated pre-send activity, and any deviation from the exact canonical five-line /status safe-text contract while defaulting local live /api/skills verification to the production domain, passing MOLTIS_PASSWORD through workflow dispatch, and preserving explicit localhost override in the remote workflow"
     fi
 
     test_start "static_runtime_attestation_and_deploy_guard_browser_sandbox_contract"
@@ -720,6 +729,28 @@ PY
         test_pass
     else
         test_fail "Active Moltis deploy surface must not require legacy GLM secrets once GitHub-rendered runtime uses GPT-5.4 OAuth + Ollama cloud fallback only"
+    fi
+
+    test_start "static_active_repo_surface_has_no_retired_glm_helpers"
+    if [[ ! -e "$PROJECT_ROOT/scripts/ci/glm_chat_completion.sh" ]] && \
+       [[ ! -e "$PROJECT_ROOT/scripts/glm-rate-monitor.sh" ]] && \
+       [[ ! -e "$PROJECT_ROOT/tests/unit/test_glm_ci_helpers.sh" ]] && \
+       ! rg -q 'glm-rate-monitor\.sh|glm_chat_completion\.sh' "$SCRIPTS_MANIFEST"; then
+        test_pass
+    else
+        test_fail "Retired GLM helper scripts and their direct unit coverage must be removed from the active repo surface after the Z.ai API-key contract was retired"
+    fi
+
+    test_start "static_provider_live_proves_primary_and_fallback_contracts"
+    if [[ -f "$PROVIDER_LIVE_SCRIPT" ]] && \
+       rg -Fq 'scripts/test-moltis-api.sh' "$PROVIDER_LIVE_SCRIPT" && \
+       rg -Fq 'EXPECTED_PROVIDER="openai-codex"' "$PROVIDER_LIVE_SCRIPT" && \
+       rg -Fq 'EXPECTED_MODEL="openai-codex::gpt-5.4"' "$PROVIDER_LIVE_SCRIPT" && \
+       rg -Fq 'OLLAMA_HOST' "$PROVIDER_LIVE_SCRIPT" && \
+       rg -Fq '/api/tags' "$PROVIDER_LIVE_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Live provider proof must attest the primary openai-codex / gpt-5.4 status contract before checking the Ollama fallback surface"
     fi
 
     test_start "static_codex_cli_update_delivery_script_is_executable"
@@ -995,12 +1026,12 @@ PY
         '    "completed",' \
         '    "timeout-minutes: 10",' \
         '    "workflow_run.conclusion",' \
-        '    "https://api.telegram.org/bot",' \
+        '    "scripts/telegram-bot-send.sh",' \
         '    "action-send-mail@v16",' \
         '    "always() && steps.email.outputs.should_send == \u0027true\u0027",' \
         '    "always() && steps.telegram.outputs.should_send == \u0027true\u0027",' \
         '    "continue-on-error: true",' \
-        '    "All configured deploy notification channels failed",' \
+        '    "scripts/github-notification-delivery-check.sh",' \
         ']' \
         'for fragment in required_notify_fragments:' \
         '    if fragment not in notify:' \
@@ -1032,9 +1063,10 @@ PY
         '    "actions: read",' \
         '    "contents: read",' \
         '    "scripts/deploy-stall-watchdog.sh",' \
+        '    "scripts/github-notification-delivery-check.sh",' \
         '    "--workflow-file \"deploy.yml\"",' \
         '    "--threshold-minutes 45",' \
-        '    "api.telegram.org/bot",' \
+        '    "scripts/telegram-bot-send.sh",' \
         '    "always() && steps.watchdog.outputs.stalled_count != \u00270\u0027 && steps.email.outputs.should_send == \u0027true\u0027",' \
         '    "always() && steps.watchdog.outputs.stalled_count != \u00270\u0027 && steps.telegram.outputs.should_send == \u0027true\u0027",' \
         '    "continue-on-error: true",' \
@@ -1410,17 +1442,18 @@ PY
     test_start "static_moltis_update_proposal_workflow_is_safe_and_non_deploying"
     if [[ -f "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" ]] && \
        [[ -x "$MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT" ]] && \
+       [[ -x "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" ]] && \
        rg -q '^name: Moltis Update Proposal$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  schedule:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  workflow_dispatch:$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  contents: write$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q '^  pull-requests: write$' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'group: moltis-update-proposal' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -q 'scripts/moltis-version\.sh version' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'gh api repos/moltis-org/moltis/releases/latest' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'scripts/moltis-update-proposal-resolver\.sh' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'scripts/moltis-update-proposal-workflow\.sh' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
        rg -q 'docker manifest inspect' "$MOLTIS_UPDATE_PROPOSAL_RESOLVER_SCRIPT" && \
-       rg -q 'gh pr create --base main' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
+       rg -q 'gh pr create --base main' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" && \
        ! rg -q 'gh workflow run "Deploy Moltis"|deploy\.sh --json moltis deploy|docker compose -f docker-compose\.prod\.yml up -d moltis' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
         test_pass
     else
@@ -1428,21 +1461,33 @@ PY
     fi
 
     test_start "static_moltis_update_proposal_perl_update_is_unambiguous_for_zero_prefixed_versions"
-    if rg -Fq '#\${1}${CANDIDATE_VERSION}\${2}#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       ! rg -Fq '#\\1${CANDIDATE_VERSION}\\2#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+    if rg -Fq '#\${1}${candidate_version}\${2}#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" && \
+       ! rg -Fq '#\\1${candidate_version}\\2#g' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT"; then
         test_pass
     else
         test_fail "Moltis update proposal workflow must use braced perl backreferences so 0.x.y candidate versions do not collapse replacement captures"
     fi
 
     test_start "static_moltis_update_proposal_falls_back_to_compare_url_when_pr_create_is_forbidden"
-    if rg -Fq 'not permitted to create or approve pull requests' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -Fq 'manual_compare_url' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -Fq 'compare/main...${BRANCH}?expand=1' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW" && \
-       rg -Fq 'supported manual compare URL approval path' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW"; then
+    if rg -Fq 'not permitted to create or approve pull requests' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" && \
+       rg -Fq 'manual_compare_url' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" && \
+       rg -Fq 'compare/main...${branch}?expand=1' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT" && \
+       rg -Fq 'supported manual compare URL approval path' "$MOLTIS_UPDATE_PROPOSAL_WORKFLOW_SCRIPT"; then
         test_pass
     else
         test_fail "Moltis update proposal workflow must fall back to a compare URL when GitHub token cannot create PRs"
+    fi
+
+    test_start "static_workflow_bad_log_hygiene_uses_repo_managed_entrypoints"
+    if [[ -x "$GITHUB_NOTIFICATION_DELIVERY_CHECK_SCRIPT" ]] && \
+       [[ -x "$GITOPS_METRICS_WORKFLOW_SCRIPT" ]] && \
+       rg -q 'scripts/github-notification-delivery-check\.sh' "$DEPLOY_STATUS_NOTIFY_WORKFLOW" && \
+       rg -q 'scripts/github-notification-delivery-check\.sh' "$DEPLOY_STALL_WATCHDOG_WORKFLOW" && \
+       rg -q 'scripts/gitops-metrics-workflow\.sh collect' "$PROJECT_ROOT/.github/workflows/gitops-metrics.yml" && \
+       rg -q 'scripts/gitops-metrics-workflow\.sh summary' "$PROJECT_ROOT/.github/workflows/gitops-metrics.yml"; then
+        test_pass
+    else
+        test_fail "Active workflow log-hygiene checks must use repo-managed scripts instead of keeping annotation-heavy shell logic inline"
     fi
 
     test_start "static_version_update_docs_fix_manual_compare_url_contract"

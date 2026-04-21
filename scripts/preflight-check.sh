@@ -218,6 +218,33 @@ validate_json_file() {
     return 0
 }
 
+read_toml_key() {
+    local toml_file="$1"
+    local section="$2"
+    local key="$3"
+
+    [[ -f "$toml_file" ]] || return 1
+
+    awk -v section="$section" -v key="$key" '
+        BEGIN { in_section = 0 }
+        /^[[:space:]]*\[/ {
+            in_section = ($0 == section)
+            next
+        }
+        in_section && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub("^[^=]+=[[:space:]]*", "", line)
+            gsub(/^"/, "", line)
+            gsub(/"$/, "", line)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$toml_file"
+}
+
 run_compose_config_check() {
     local compose_file="$1"
 
@@ -408,13 +435,13 @@ check_ollama_config() {
     fi
 
     if grep -q '^\[providers\.ollama\]' "$moltis_config"; then
-        ollama_enabled=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
-        ollama_base_url=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'base_url' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
-        ollama_model=$(grep -A5 '^\[providers\.ollama\]' "$moltis_config" | grep 'model' | sed 's/.*=.*"\([^"]*\)".*/\1/' | head -1)
+        ollama_enabled="$(read_toml_key "$moltis_config" '[providers.ollama]' 'enabled' || true)"
+        ollama_base_url="$(read_toml_key "$moltis_config" '[providers.ollama]' 'base_url' || true)"
+        ollama_model="$(read_toml_key "$moltis_config" '[providers.ollama]' 'model' || true)"
     fi
 
     if grep -q '^\[failover\]' "$moltis_config"; then
-        failover_enabled=$(grep -A5 '^\[failover\]' "$moltis_config" | grep 'enabled' | sed 's/.*=.*\(true\|false\).*/\1/' | head -1)
+        failover_enabled="$(read_toml_key "$moltis_config" '[failover]' 'enabled' || true)"
     fi
 
     if [[ "$ollama_enabled" == "true" ]]; then

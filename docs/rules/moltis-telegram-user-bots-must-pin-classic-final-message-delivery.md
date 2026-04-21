@@ -28,12 +28,13 @@ stream_mode = "off"
    - tracked `config/moltis.toml`
    - live runtime config / channel DB state
 4. Streaming experiments belong only in controlled debug lanes, not in the main user bot.
-5. If the bot must fail closed against tool-heavy Telegram turns, pin it to a dedicated
-   per-account `model_provider` whose provider entry sets `tool_mode = "off"`.
+5. If the bot must fail closed against tool-heavy Telegram turns, pin it to the canonical
+   `openai-codex::gpt-5.4` / `openai-codex` identity and verify the repo-owned Telegram-safe guard
+   is registered and enforced instead of relying on a dedicated provider with `tool_mode = "off"`.
 
 ## Not enough on its own
 
 This rule prevents Telegram delivery drift. It does not prove that browser/runtime issues
 are fixed. If users still hit browser timeouts, investigate browser session lifecycle,
-pool pressure, timeout budgets, and whether the user-facing account drifted back onto a
-shared tool-capable provider separately.
+pool pressure, timeout budgets, and whether the user-facing account drifted away from the
+canonical guarded safe provider identity separately.

@@ -986,6 +986,32 @@
       },
       "cron": "0 * * * *"
     },
+    "gitops-metrics-workflow.sh": {
+      "version": "1.0.0",
+      "description": "Workflow entrypoint that collects GitOps metrics and writes GitHub summary/output without noisy inline shell blocks",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "jq",
+        "ssh"
+      ],
+      "provides": [
+        "gitops-metrics-workflow"
+      ],
+      "ci": true
+    },
+    "github-notification-delivery-check.sh": {
+      "version": "1.0.0",
+      "description": "Shared GitHub Actions notification outcome guard for deploy and watchdog flows",
+      "entrypoint": true,
+      "requires": [
+        "bash"
+      ],
+      "provides": [
+        "github-notification-delivery-check"
+      ],
+      "ci": true
+    },
     "health-monitor.sh": {
       "version": "1.0.0",
       "description": "Health monitoring and alerting",
@@ -1094,6 +1120,21 @@
       ],
       "provides": [
         "moltis-update-proposal-resolver"
+      ],
+      "ci": true
+    },
+    "moltis-update-proposal-workflow.sh": {
+      "version": "1.0.0",
+      "description": "Prepare/update the proposal branch and synchronize the review PR for tracked Moltis upgrades",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "gh",
+        "git",
+        "perl"
+      ],
+      "provides": [
+        "moltis-update-proposal-workflow"
       ],
       "ci": true
     },
@@ -1300,20 +1341,6 @@
         "EXPECTED_MODEL",
         "EXPECTED_REPLY_TEXT",
         "RESET_CHAT_CONTEXT_BEFORE_SEND"
-      ]
-    },
-    "glm-rate-monitor.sh": {
-      "version": "1.0.0",
-      "description": "Monitor official BigModel Coding Plan API rate limits and output JSON for CI",
-      "entrypoint": true,
-      "requires": [
-        "curl",
-        "jq"
-      ],
-      "provides": [
-        "glm-rate-monitor",
-        "glm-rate-watch",
-        "glm-rate-json"
       ]
     },
     "telegram-webhook-rollout.sh": {

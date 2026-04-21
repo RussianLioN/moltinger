@@ -34,6 +34,7 @@ LOCAL_MOLTIS_URL_DEFAULT="${LOCAL_MOLTIS_URL_DEFAULT:-http://localhost:13131}"
 PRODUCTION_MOLTIS_URL_DEFAULT="${PRODUCTION_MOLTIS_URL_DEFAULT:-https://moltis.ainetic.tech}"
 MOLTIS_PASSWORD_ENV="${MOLTIS_PASSWORD_ENV:-MOLTIS_PASSWORD}"
 STATUS_EXPECTED_MODEL="${STATUS_EXPECTED_MODEL:-openai-codex::gpt-5.4}"
+STATUS_EXPECTED_PROVIDER="${STATUS_EXPECTED_PROVIDER:-openai-codex}"
 SKILLS_API_ATTEMPTS="${SKILLS_API_ATTEMPTS:-5}"
 SKILLS_API_RETRY_DELAY_SECONDS="${SKILLS_API_RETRY_DELAY_SECONDS:-1}"
 SKILL_CREATE_FOLLOWUP_MESSAGE="${SKILL_CREATE_FOLLOWUP_MESSAGE:-А что у тебя с навыками/skills?}"
@@ -1129,8 +1130,9 @@ fi
     return 0
   fi
 
-  local verification_gate_re
+  local verification_gate_re expected_status
   verification_gate_re='verification code|enter the verification code'
+  expected_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: '"$STATUS_EXPECTED_MODEL"$'\nПровайдер: '"$STATUS_EXPECTED_PROVIDER"$'\nРежим: safe-text'
 
   if printf '%s' "$reply_text" | grep -Eiq "$verification_gate_re"; then
     VERDICT="failed"
@@ -1145,16 +1147,18 @@ fi
     return 0
   fi
 
-  if [[ -n "$STATUS_EXPECTED_MODEL" ]] && [[ "$reply_text" != *"$STATUS_EXPECTED_MODEL"* ]]; then
+  if [[ "$reply_text" != "$expected_status" ]]; then
     VERDICT="failed"
     RUN_STAGE="semantic_review"
-    FAILURE_JSON="$(build_failure_json "semantic_status_mismatch" "$RUN_STAGE" "Authoritative /status reply was attributable but did not mention the canonical model contract" "operator" true)"
+    FAILURE_JSON="$(build_failure_json "semantic_status_mismatch" "$RUN_STAGE" "Authoritative /status reply was attributable but did not match the canonical five-line safe-text contract" "operator" true)"
     DIAGNOSTIC_JSON="$(jq -cn \
       --arg reply_text "$reply_text" \
       --arg expected_model "$STATUS_EXPECTED_MODEL" \
+      --arg expected_provider "$STATUS_EXPECTED_PROVIDER" \
+      --arg expected_reply "$expected_status" \
       --argjson base "$DIAGNOSTIC_JSON" \
-      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, observed_reply:$reply_text, failure:"semantic_status_mismatch"}}')"
-    RECOMMENDED_ACTION="Reset or reconcile the active session/runtime and rerun authoritative /status until the reply itself mentions the canonical model."
+      '$base + {semantic_review:{message:"/status", expected_model:$expected_model, expected_provider:$expected_provider, expected_reply:$expected_reply, observed_reply:$reply_text, failure:"semantic_status_mismatch"}}')"
+    RECOMMENDED_ACTION="Reset or reconcile the active session/runtime and rerun authoritative /status until the reply exactly matches the canonical five-line safe-text contract."
   fi
 }
 

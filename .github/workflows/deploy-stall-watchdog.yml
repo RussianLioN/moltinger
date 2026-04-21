@@ -161,50 +161,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          PAYLOAD="$(jq -nc \
-            --arg chat_id "$TELEGRAM_CHAT_ID" \
-            --arg text "$TELEGRAM_MESSAGE" \
-            '{chat_id: $chat_id, text: $text}')"
-
-          RESULT="$(
-            curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -H 'Content-Type: application/json' \
-              -d "$PAYLOAD"
-          )"
+          RESULT="$(bash ./scripts/telegram-bot-send.sh \
+            --chat-id "$TELEGRAM_CHAT_ID" \
+            --text "$TELEGRAM_MESSAGE" \
+            --token "$TELEGRAM_BOT_TOKEN")"
           echo "$RESULT"
-
-          if ! jq -e '.ok == true' >/dev/null 2>&1 <<<"$RESULT"; then
-            echo "::error::Telegram send failed"
-            exit 1
-          fi
 
       - name: Validate watchdog notification delivery
         if: ${{ always() && steps.watchdog.outputs.stalled_count != '0' }}
         env:
+          NOTIFICATION_SCOPE: watchdog
           EMAIL_ENABLED: ${{ steps.email.outputs.should_send || 'false' }}
           TELEGRAM_ENABLED: ${{ steps.telegram.outputs.should_send || 'false' }}
           EMAIL_OUTCOME: ${{ steps.send_email.outcome || 'skipped' }}
           TELEGRAM_OUTCOME: ${{ steps.send_telegram.outcome || 'skipped' }}
         run: |
-          set -euo pipefail
-
-          configured_channels=0
-          successful_channels=0
-
-          if [[ "$EMAIL_ENABLED" == "true" ]]; then
-            configured_channels=$((configured_channels + 1))
-            [[ "$EMAIL_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
-          fi
-
-          if [[ "$TELEGRAM_ENABLED" == "true" ]]; then
-            configured_channels=$((configured_channels + 1))
-            [[ "$TELEGRAM_OUTCOME" == "success" ]] && successful_channels=$((successful_channels + 1))
-          fi
-
-          if (( configured_channels > 0 && successful_channels == 0 )); then
-            echo "::error::All configured watchdog notification channels failed"
-            exit 1
-          fi
+          bash ./scripts/github-notification-delivery-check.sh
 
       - name: Watchdog summary
         if: always()

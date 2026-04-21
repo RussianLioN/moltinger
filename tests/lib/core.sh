@@ -391,20 +391,6 @@ assert_lt() {
     return 0
 }
 
-mock_glm_failure() {
-    export GLM_API_BASE_REAL="${GLM_API_BASE:-https://open.bigmodel.cn/api/coding/paas/v4}"
-    export GLM_API_BASE="http://127.0.0.1:49999"
-}
-
-restore_glm() {
-    if [[ -n "${GLM_API_BASE_REAL:-}" ]]; then
-        export GLM_API_BASE="$GLM_API_BASE_REAL"
-        unset GLM_API_BASE_REAL
-    else
-        unset GLM_API_BASE
-    fi
-}
-
 mock_ollama_failure() {
     export OLLAMA_HOST_REAL="${OLLAMA_HOST:-http://127.0.0.1:11434}"
     export OLLAMA_HOST="http://127.0.0.1:49999"

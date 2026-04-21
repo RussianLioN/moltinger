@@ -144,12 +144,11 @@ services:
       TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS}
       TAVILY_API_KEY_FILE: /run/secrets/tavily_api_key
-      GLM_API_KEY_FILE: /run/secrets/glm_api_key
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
     secrets:
       - moltis_password
       - telegram_bot_token
       - tavily_api_key
-      - glm_api_key
     healthcheck:
       <<: *healthcheck          # Anchor: health check config
     logging:

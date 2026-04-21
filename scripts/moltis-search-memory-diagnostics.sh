@@ -102,8 +102,8 @@ runtime = {
     "memory": {
         "memory_search_invocations": 0,
         "memory_search_tool_failures": 0,
-        "openai_embeddings_400": 0,
-        "groq_embeddings_401": 0,
+        "legacy_bigmodel_embeddings_400": 0,
+        "legacy_groq_embeddings_401": 0,
     },
 }
 
@@ -121,10 +121,10 @@ if log_path:
     runtime["memory"]["memory_search_tool_failures"] = count_lines(
         lambda line: "memory_search" in line and ("tool execution failed" in line or "all embedding providers failed" in line)
     )
-    runtime["memory"]["openai_embeddings_400"] = count_lines(
+    runtime["memory"]["legacy_bigmodel_embeddings_400"] = count_lines(
         lambda line: "https://open.bigmodel.cn/api/coding/paas/v4/embeddings" in line or "https://api.z.ai/api/coding/paas/v4/embeddings" in line or "openai: HTTP status client error (400 Bad Request)" in line
     )
-    runtime["memory"]["groq_embeddings_401"] = count_lines(
+    runtime["memory"]["legacy_groq_embeddings_401"] = count_lines(
         lambda line: "https://api.groq.com/openai/v1/embeddings" in line or "groq: HTTP status client error (401 Unauthorized)" in line
     )
 
@@ -137,9 +137,9 @@ risk_summary = {
     "tavily_transport_unstable": runtime["tavily"]["mcp_sse_handshake_failures"] > 0 or runtime["tavily"]["mcp_auto_restart_failures"] > 0,
     "memory_provider_autodetect": (not keyword_only_mode) and not provider_pinned,
     "memory_missing_watch_dirs": not watch_dirs_configured,
-    "memory_embedding_provider_failures_present": runtime["memory"]["openai_embeddings_400"] > 0 or runtime["memory"]["groq_embeddings_401"] > 0 or runtime["memory"]["memory_search_tool_failures"] > 0,
-    "openai_embeddings_endpoint_mismatch_suspected": runtime["memory"]["openai_embeddings_400"] > 0,
-    "groq_runtime_drift_suspected": runtime["memory"]["groq_embeddings_401"] > 0,
+    "memory_embedding_provider_failures_present": runtime["memory"]["legacy_bigmodel_embeddings_400"] > 0 or runtime["memory"]["legacy_groq_embeddings_401"] > 0 or runtime["memory"]["memory_search_tool_failures"] > 0,
+    "legacy_bigmodel_embedding_drift_suspected": runtime["memory"]["legacy_bigmodel_embeddings_400"] > 0,
+    "legacy_groq_embedding_drift_suspected": runtime["memory"]["legacy_groq_embeddings_401"] > 0,
 }
 
 print(

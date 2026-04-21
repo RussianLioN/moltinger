@@ -53,6 +53,38 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "status_extra_line_mismatch" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text\nДополнительно: tmux healthy",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "verification_gate_pass" ]]; then
   cat <<'JSON'
 {
@@ -1434,11 +1466,32 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must fail when /status reply omits the canonical model contract"
     else
         if jq -e '.failure.code == "semantic_status_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
-            && jq -e '.diagnostic_context.semantic_review.expected_model == "openai-codex::gpt-5.4"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
+            && jq -e '.diagnostic_context.semantic_review.expected_model == "openai-codex::gpt-5.4"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.expected_provider == "openai-codex"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.expected_reply == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' "$TEST_TMPDIR/result-status-mismatch.json" >/dev/null 2>&1
         then
             test_pass
         else
             test_fail "Wrapper must surface semantic /status mismatches as a failed authoritative verdict"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_status_reply_with_extra_lines_even_if_canonical_fields_exist"
+    if TELEGRAM_WEB_STUB_MODE=status_extra_line_mismatch \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "/status" \
+        --output "$TEST_TMPDIR/result-status-extra-line.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when /status includes extra lines beyond the canonical five-line safe-text contract"
+    else
+        if jq -e '.failure.code == "semantic_status_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-status-extra-line.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.expected_reply == "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text"' "$TEST_TMPDIR/result-status-extra-line.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require the exact five-line /status reply and reject attributable extra tail text"
         fi
     fi
 

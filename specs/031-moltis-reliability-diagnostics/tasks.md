@@ -1,5 +1,9 @@
 # Tasks: Moltis Reliability Diagnostics and Runtime Guardrails
 
+> Status note (2026-04-21): historical closed reliability package. Current active
+> blocker/hygiene remediation now lives in `../041-project-remediation-blockers/`
+> and `../042-project-hygiene-drift-closure/`.
+
 **Input**: Design documents from `/specs/031-moltis-reliability-diagnostics/`  
 **Prerequisites**: plan.md, spec.md
 

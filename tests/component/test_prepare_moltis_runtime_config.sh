@@ -10,7 +10,7 @@ PREPARE_SCRIPT="$PROJECT_ROOT/scripts/prepare-moltis-runtime-config.sh"
 run_component_prepare_moltis_runtime_config_tests() {
     start_timer
 
-    test_start "component_prepare_runtime_config_preserves_auth_files_and_normalizes_openai_codex_model_order"
+    test_start "component_prepare_runtime_config_preserves_auth_files_and_removes_legacy_provider_aliases"
 
     local fixture_root static_dir runtime_dir
     fixture_root="$(secure_temp_dir prepare-moltis-runtime-config)"
@@ -23,11 +23,6 @@ run_component_prepare_moltis_runtime_config_tests() {
 enabled = true
 model = "gpt-5.4"
 models = ["gpt-5.4"]
-
-[providers.openai]
-enabled = true
-model = "glm-5.1"
-alias = "glm"
 EOF
     printf 'tracked\n' >"$static_dir/subdir/marker.txt"
 
@@ -60,15 +55,14 @@ EOF
 
     if [[ "$(jq -r '."openai-codex".models[0]' "$runtime_dir/provider_keys.json")" != "gpt-5.4" ]] || \
        [[ "$(jq -r '."openai-codex".models[1]' "$runtime_dir/provider_keys.json")" != "gpt-5.4-mini" ]] || \
-       [[ "$(jq -r '.glm.models[0]' "$runtime_dir/provider_keys.json")" != "glm-5.1" ]] || \
-       [[ "$(jq -r '.glm.models[1]' "$runtime_dir/provider_keys.json")" != "glm-5" ]]; then
-        test_fail "prepare-moltis-runtime-config.sh must keep tracked provider preferences primary while migrating legacy Z.ai aliases"
+       [[ "$(jq -r '."openai-codex".models[2]' "$runtime_dir/provider_keys.json")" != "gpt-5.3-codex" ]]; then
+        test_fail "prepare-moltis-runtime-config.sh must keep the tracked OpenAI Codex model first while preserving existing runtime preferences"
         rm -rf "$fixture_root"
         return
     fi
 
     if jq -e '.zai or .["custom-zai-telegram-safe"] or .["zai-telegram-safe"]' "$runtime_dir/provider_keys.json" >/dev/null 2>&1; then
-        test_fail "prepare-moltis-runtime-config.sh must remove legacy Z.ai runtime aliases from provider_keys.json"
+        test_fail "prepare-moltis-runtime-config.sh must remove legacy runtime provider aliases from provider_keys.json"
         rm -rf "$fixture_root"
         return
     fi
