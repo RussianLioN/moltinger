@@ -27,7 +27,7 @@ services:
   # MOLTIS - Main Application
   # ========================================================================
   moltis:
-    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-0.10.18}
+    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-20260420.02}
     container_name: moltis
     restart: unless-stopped
     stop_grace_period: 45s
