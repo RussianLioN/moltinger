@@ -30,7 +30,7 @@ make version-check
 Production Moltis updates are git-based and backup-safe only.
 
 The tracked version must point to a published GHCR container tag, not only to a GitHub release tag.
-Use GHCR tag format without a leading `v` (for example `0.10.18`, not `v0.10.18`).
+Use GHCR tag format without a leading `v` (for example `20260421.05`, not `v20260421.05`).
 
 Allowed:
 
@@ -86,7 +86,7 @@ BACKUP_FILE="$(cat data/moltis/.last-moltis-backup)"
 - allow only production target in workflow_dispatch
 - allow tag-triggered production deploy only when tag SHA equals current `origin/main` HEAD
 - keep manual version input blank by default (tracked git version is source of truth)
-- block deploy when tracked git version is lower than the currently running semver-tagged Moltis image
+- block deploy when tracked git version is lower than the currently running explicit Moltis release tag
 - block deploy if restore readiness fails
 
 `.github/workflows/uat-gate.yml` is expected to:
@@ -103,7 +103,7 @@ Workflow contract:
 
 1. Runs on schedule or manual dispatch.
 2. Reads official latest release from `moltis-org/moltis`.
-3. Normalizes release tag to GHCR runtime tag (`vX.Y.Z -> X.Y.Z`).
+3. Normalizes the upstream release tag into the pullable GHCR runtime tag when upstream uses a `v` prefix.
 4. Verifies `ghcr.io/moltis-org/moltis:<tag>` is pullable.
 5. Tries to create or update a PR against `main` with pinned compose changes only.
 6. If GitHub Actions cannot create PRs (`createPullRequest` restricted), workflow stays successful and emits a compare URL (`.../compare/main...<branch>?expand=1`) for manual PR creation.

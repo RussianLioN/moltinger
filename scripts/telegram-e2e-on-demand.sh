@@ -206,7 +206,7 @@ reply_has_internal_activity() {
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*|*"mcp tool error"*|*"validation errors for call["*|*"missing required argument"*|*"unexpected keyword argument"*|*"fetching github.com"*|*"fetching http://"*|*"fetching https://"*)
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*|*"mcp tool error"*|*"validation errors for call["*|*"missing required argument"*|*"unexpected keyword argument"*|*"fetching github.com"*|*"fetching http://"*|*"fetching https://"*|*"create_skill"*|*"update_skill"*|*"patch_skill"*|*"delete_skill"*|*"write_skill_files"*)
       return 0
       ;;
   esac
@@ -219,7 +219,7 @@ reply_has_internal_planning_leak() {
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|как пример|mcp__|mounted workspace|skill files|existing skills|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
+  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|как пример|mcp__|mounted workspace|skill files|existing skills|create_skill|update_skill|patch_skill|delete_skill|write_skill_files|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
     return 0
   fi
 
@@ -246,6 +246,30 @@ message_is_skill_create_query() {
   [[ -n "$normalized" ]] || return 1
 
   if printf '%s' "$normalized" | grep -Eiq '(созда(й|йте|дим|ть|вать)|создать|создай|создадим|create|build|make).{0,40}(навык|skill)|(навык|skill).{0,24}(созда|create)'; then
+    return 0
+  fi
+
+  return 1
+}
+
+message_is_skill_mutation_query() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if printf '%s' "$normalized" | grep -Eiq '((созда(й|йте|дим|ть|вать)|создать|создай|создадим|обнов(и|ите|им|ить)|измени(ть|те|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ите|ем|у)|удали(ть|те|м)?|delete|update|patch|rewrite|edit|remove).{0,40}(навык|skill))|((навык|skill).{0,24}(созда|update|patch|delete|удал|обнов|редакт|rewrite|edit|remove))'; then
+    return 0
+  fi
+
+  return 1
+}
+
+message_is_skill_delete_query() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if printf '%s' "$normalized" | grep -Eiq '((удали(ть|те|м)?|delete|remove).{0,40}(навык|skill))|((навык|skill).{0,24}(удал|delete|remove))'; then
     return 0
   fi
 
@@ -399,7 +423,7 @@ capture_pre_send_skills_baseline() {
   PRE_SEND_SKILLS_CAPTURE_STATUS="not_requested"
   PRE_SEND_SKILLS_CAPTURE_ERROR=""
 
-  if ! message_is_skill_create_query "$MESSAGE"; then
+  if ! message_is_skill_create_query "$MESSAGE" && ! message_is_skill_mutation_query "$MESSAGE"; then
     return 0
   fi
 
@@ -923,7 +947,7 @@ evaluate_authoritative_semantics() {
     return 0
   fi
 
-  if message_is_skill_visibility_query "$normalized_message" || message_is_skill_create_query "$normalized_message"; then
+  if message_is_skill_visibility_query "$normalized_message" || message_is_skill_create_query "$normalized_message" || message_is_skill_mutation_query "$normalized_message"; then
     if ! skill_query_skills_json="$(fetch_authenticated_skills_json)"; then
       fail_skill_semantics_when_api_unavailable "$normalized_message" "$reply_text"
       return 0
@@ -1109,6 +1133,118 @@ evaluate_authoritative_semantics() {
       RUN_STAGE="semantic_review"
       FAILURE_JSON="$(build_failure_json "semantic_skill_create_followup_visibility_mismatch" "$RUN_STAGE" "Post-create Telegram follow-up did not mention the newly created live skill, so immediate visibility/useability was not proven" "operator" true)"
       RECOMMENDED_ACTION="Require the next Telegram visibility turn after create to mention the newly created live skill before treating the flow as green."
+      return 0
+    fi
+  fi
+
+  if message_is_skill_mutation_query "$normalized_message" && ! message_is_skill_create_query "$normalized_message" && reply_has_skill_false_negative "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_false_negative" "$RUN_STAGE" "Authoritative skill mutation reply fell back to sandbox filesystem absence reasoning instead of native runtime skill-tool truth" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson runtime_skill_names "$runtime_skill_names" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_false_negative"}}')"
+    RECOMMENDED_ACTION="Reconcile Telegram skill mutation so update/patch/delete replies stay on native runtime skill tools instead of drifting into filesystem false negatives."
+    return 0
+  fi
+
+  if message_is_skill_mutation_query "$normalized_message" && ! message_is_skill_create_query "$normalized_message"; then
+    requested_skill_name="$(extract_requested_skill_name "$normalized_message" || true)"
+
+    if [[ -z "$requested_skill_name" ]]; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_name_unparsed" "$RUN_STAGE" "Authoritative skill-mutation message did not expose a parseable requested skill name, so the target could not be proven" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_name_unparsed"}}')"
+      RECOMMENDED_ACTION="Use a Telegram mutation prompt that includes the concrete skill name in a parseable form and rerun authoritative UAT."
+      return 0
+    fi
+
+    if [[ "$PRE_SEND_SKILLS_CAPTURE_STATUS" != "captured" ]]; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_baseline_unavailable" "$RUN_STAGE" "Authoritative skill-mutation check could not capture a live pre-send /api/skills baseline" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --arg requested_skill_name "$requested_skill_name" \
+        --arg baseline_status "$PRE_SEND_SKILLS_CAPTURE_STATUS" \
+        --arg baseline_error "$PRE_SEND_SKILLS_CAPTURE_ERROR" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, baseline_status:$baseline_status, baseline_error:(if $baseline_error == "" then null else $baseline_error end), runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_baseline_unavailable"}}')"
+      RECOMMENDED_ACTION="Restore authenticated pre-send /api/skills baseline capture for Telegram update/patch/delete UAT and rerun the check."
+      return 0
+    fi
+
+    if ! skills_json_has_skill_name "$requested_skill_name" "$PRE_SEND_SKILLS_JSON"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_target_missing_before_send" "$RUN_STAGE" "Authoritative skill-mutation check could not prove the target skill existed before send" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --arg requested_skill_name "$requested_skill_name" \
+        --argjson pre_send_skill_names "$(runtime_skill_names_json "$PRE_SEND_SKILLS_JSON")" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, pre_send_skill_names:$pre_send_skill_names, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_target_missing_before_send"}}')"
+      RECOMMENDED_ACTION="Rerun Telegram mutation UAT against an already existing live skill so the pre->post transition can be proven."
+      return 0
+    fi
+
+    if message_is_skill_delete_query "$normalized_message"; then
+      if skills_json_has_skill_name "$requested_skill_name" "$skill_query_skills_json"; then
+        VERDICT="failed"
+        RUN_STAGE="semantic_review"
+        FAILURE_JSON="$(build_failure_json "semantic_skill_delete_not_persisted" "$RUN_STAGE" "Authoritative delete reply completed but the target skill still exists in live /api/skills" "operator" true)"
+        DIAGNOSTIC_JSON="$(jq -cn \
+          --arg reply_text "$reply_text" \
+          --arg message "$normalized_message" \
+          --arg requested_skill_name "$requested_skill_name" \
+          --argjson runtime_skill_names "$runtime_skill_names" \
+          --argjson base "$DIAGNOSTIC_JSON" \
+          '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_delete_not_persisted"}}')"
+        RECOMMENDED_ACTION="Require Telegram delete flow to remove the target from live /api/skills before treating the mutation as green."
+        return 0
+      fi
+    else
+      if ! skills_json_has_skill_name "$requested_skill_name" "$skill_query_skills_json"; then
+        VERDICT="failed"
+        RUN_STAGE="semantic_review"
+        FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_target_missing_after_send" "$RUN_STAGE" "Authoritative update/patch reply completed but the target skill is missing from live /api/skills after send" "operator" true)"
+        DIAGNOSTIC_JSON="$(jq -cn \
+          --arg reply_text "$reply_text" \
+          --arg message "$normalized_message" \
+          --arg requested_skill_name "$requested_skill_name" \
+          --argjson runtime_skill_names "$runtime_skill_names" \
+          --argjson base "$DIAGNOSTIC_JSON" \
+          '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_target_missing_after_send"}}')"
+        RECOMMENDED_ACTION="Require Telegram update/patch flow to keep the target skill visible in live /api/skills after mutation."
+        return 0
+      fi
+    fi
+
+    if ! reply_mentions_requested_skill_name "$reply_text" "$requested_skill_name"; then
+      VERDICT="failed"
+      RUN_STAGE="semantic_review"
+      FAILURE_JSON="$(build_failure_json "semantic_skill_mutation_reply_missing_target_name" "$RUN_STAGE" "Authoritative skill-mutation reply did not mention the target skill name, so the user-visible outcome stayed ambiguous" "operator" true)"
+      DIAGNOSTIC_JSON="$(jq -cn \
+        --arg reply_text "$reply_text" \
+        --arg message "$normalized_message" \
+        --arg requested_skill_name "$requested_skill_name" \
+        --argjson runtime_skill_names "$runtime_skill_names" \
+        --argjson base "$DIAGNOSTIC_JSON" \
+        '$base + {semantic_review:{message:$message, observed_reply:$reply_text, requested_skill_name:$requested_skill_name, runtime_skill_names:$runtime_skill_names, failure:"semantic_skill_mutation_reply_missing_target_name"}}')"
+      RECOMMENDED_ACTION="Return a short user-facing mutation result that explicitly names the affected skill, then rerun authoritative UAT."
       return 0
     fi
   fi

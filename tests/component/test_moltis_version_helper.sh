@@ -53,14 +53,14 @@ run_component_moltis_version_helper_tests() {
     local tagged_main tagged_prod tagged_version tagged_image
     tagged_main="${project_dir}/docker-compose.yml"
     tagged_prod="${project_dir}/docker-compose.prod.yml"
-    write_compose_fixture "$tagged_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-0.10.18}'
-    write_compose_fixture "$tagged_prod" 'ghcr.io/moltis-org/moltis:0.10.18'
+    write_compose_fixture "$tagged_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-20260421.05}'
+    write_compose_fixture "$tagged_prod" 'ghcr.io/moltis-org/moltis:20260421.05'
 
     tagged_version="$("$helper_copy" version)"
     tagged_image="$("$helper_copy" image)"
 
-    if [[ "$tagged_version" == "0.10.18" ]] && \
-       [[ "$tagged_image" == "ghcr.io/moltis-org/moltis:0.10.18" ]] && \
+    if [[ "$tagged_version" == "20260421.05" ]] && \
+       [[ "$tagged_image" == "ghcr.io/moltis-org/moltis:20260421.05" ]] && \
        "$helper_copy" assert-tracked >/dev/null 2>&1; then
         test_pass
     else
@@ -71,37 +71,55 @@ run_component_moltis_version_helper_tests() {
     local quoted_main quoted_prod quoted_version quoted_image
     quoted_main="${project_dir}/docker-compose.yml"
     quoted_prod="${project_dir}/docker-compose.prod.yml"
-    write_compose_fixture "$quoted_main" '"ghcr.io/moltis-org/moltis:${MOLTIS_VERSION-0.10.18}" # pinned via default'
-    write_compose_fixture "$quoted_prod" "'ghcr.io/moltis-org/moltis:0.10.18' # explicit prod image"
+    write_compose_fixture "$quoted_main" '"ghcr.io/moltis-org/moltis:${MOLTIS_VERSION-20260421.05}" # pinned via default'
+    write_compose_fixture "$quoted_prod" "'ghcr.io/moltis-org/moltis:20260421.05' # explicit prod image"
 
     quoted_version="$("$helper_copy" version)"
     quoted_image="$("$helper_copy" image)"
 
-    if [[ "$quoted_version" == "0.10.18" ]] && \
-       [[ "$quoted_image" == "ghcr.io/moltis-org/moltis:0.10.18" ]]; then
+    if [[ "$quoted_version" == "20260421.05" ]] && \
+       [[ "$quoted_image" == "ghcr.io/moltis-org/moltis:20260421.05" ]]; then
         test_pass
     else
         test_fail "Helper should normalize quoted compose image lines, comments, and ${MOLTIS_VERSION-...} defaults"
     fi
 
-    test_start "component_moltis_version_helper_accepts_calendar_release_tags"
-    local calendar_main calendar_prod calendar_version calendar_image normalized_calendar
-    calendar_main="${project_dir}/docker-compose.yml"
-    calendar_prod="${project_dir}/docker-compose.prod.yml"
-    write_compose_fixture "$calendar_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-20260420.02}'
-    write_compose_fixture "$calendar_prod" 'ghcr.io/moltis-org/moltis:20260420.02'
-
-    calendar_version="$("$helper_copy" version)"
-    calendar_image="$("$helper_copy" image)"
-    normalized_calendar="$("$helper_copy" normalize-tag "v20260420.02")"
-
-    if [[ "$calendar_version" == "20260420.02" ]] && \
-       [[ "$calendar_image" == "ghcr.io/moltis-org/moltis:20260420.02" ]] && \
-       [[ "$normalized_calendar" == "20260420.02" ]] && \
-       "$helper_copy" assert-tracked >/dev/null 2>&1; then
+    test_start "component_moltis_version_helper_normalizes_prefixed_upstream_release_tags"
+    local normalized_tag
+    normalized_tag="$("$helper_copy" normalize-tag 'v0.122.0')"
+    if [[ "$normalized_tag" == "0.122.0" ]]; then
         test_pass
     else
-        test_fail "Helper should accept explicit calendar-style GHCR tags and normalize matching release tags with a leading v"
+        test_fail "Helper should normalize upstream v-prefixed release tags into pullable GHCR tags"
+    fi
+
+    test_start "component_moltis_version_helper_compares_calendar_release_tags"
+    local compare_result
+    compare_result="$("$helper_copy" compare '20260421.04' '20260421.05')"
+    if [[ "$compare_result" == "-1" ]]; then
+        test_pass
+    else
+        test_fail "Helper should compare calendar-style Moltis release tags monotonically"
+    fi
+
+    test_start "component_moltis_version_helper_treats_stable_calendar_release_as_newer_than_prerelease"
+    local compare_calendar_prerelease compare_calendar_prerelease_reverse
+    compare_calendar_prerelease="$("$helper_copy" compare '20260421.05' '20260421.05-rc1')"
+    compare_calendar_prerelease_reverse="$("$helper_copy" compare '20260421.05-rc1' '20260421.05')"
+    if [[ "$compare_calendar_prerelease" == "1" ]] && [[ "$compare_calendar_prerelease_reverse" == "-1" ]]; then
+        test_pass
+    else
+        test_fail "Helper must rank a stable calendar tag above the matching prerelease suffix so deploy downgrade guards stay correct"
+    fi
+
+    test_start "component_moltis_version_helper_treats_stable_semver_release_as_newer_than_prerelease"
+    local compare_semver_prerelease compare_semver_prerelease_reverse
+    compare_semver_prerelease="$("$helper_copy" compare '0.122.0' '0.122.0-rc1')"
+    compare_semver_prerelease_reverse="$("$helper_copy" compare '0.122.0-rc1' '0.122.0')"
+    if [[ "$compare_semver_prerelease" == "1" ]] && [[ "$compare_semver_prerelease_reverse" == "-1" ]]; then
+        test_pass
+    else
+        test_fail "Helper must rank a stable semver tag above the matching prerelease suffix so deploy downgrade guards stay correct"
     fi
 
     test_start "component_moltis_version_helper_rejects_non_defaulted_variable"
@@ -122,7 +140,7 @@ run_component_moltis_version_helper_tests() {
     mismatch_main="${project_dir}/docker-compose.yml"
     mismatch_prod="${project_dir}/docker-compose.prod.yml"
     write_compose_fixture "$mismatch_main" 'ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-latest}'
-    write_compose_fixture "$mismatch_prod" 'ghcr.io/moltis-org/moltis:0.10.18'
+    write_compose_fixture "$mismatch_prod" 'ghcr.io/moltis-org/moltis:20260421.05'
 
     if "$helper_copy" version >/dev/null 2>&1; then
         test_fail "Helper must fail when dev/prod compose contracts disagree"
