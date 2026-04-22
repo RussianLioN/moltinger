@@ -102,6 +102,26 @@ run_component_moltis_version_helper_tests() {
         test_fail "Helper should compare calendar-style Moltis release tags monotonically"
     fi
 
+    test_start "component_moltis_version_helper_treats_stable_calendar_release_as_newer_than_prerelease"
+    local compare_calendar_prerelease compare_calendar_prerelease_reverse
+    compare_calendar_prerelease="$("$helper_copy" compare '20260421.05' '20260421.05-rc1')"
+    compare_calendar_prerelease_reverse="$("$helper_copy" compare '20260421.05-rc1' '20260421.05')"
+    if [[ "$compare_calendar_prerelease" == "1" ]] && [[ "$compare_calendar_prerelease_reverse" == "-1" ]]; then
+        test_pass
+    else
+        test_fail "Helper must rank a stable calendar tag above the matching prerelease suffix so deploy downgrade guards stay correct"
+    fi
+
+    test_start "component_moltis_version_helper_treats_stable_semver_release_as_newer_than_prerelease"
+    local compare_semver_prerelease compare_semver_prerelease_reverse
+    compare_semver_prerelease="$("$helper_copy" compare '0.122.0' '0.122.0-rc1')"
+    compare_semver_prerelease_reverse="$("$helper_copy" compare '0.122.0-rc1' '0.122.0')"
+    if [[ "$compare_semver_prerelease" == "1" ]] && [[ "$compare_semver_prerelease_reverse" == "-1" ]]; then
+        test_pass
+    else
+        test_fail "Helper must rank a stable semver tag above the matching prerelease suffix so deploy downgrade guards stay correct"
+    fi
+
     test_start "component_moltis_version_helper_rejects_non_defaulted_variable"
     local variable_main variable_prod
     variable_main="${project_dir}/docker-compose.yml"

@@ -686,6 +686,17 @@ json_string_field_present_and_nonempty_from_text() {
     string_has_nonwhitespace "$value"
 }
 
+json_array_field_has_object_entries_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+
+    [[ -n "$source_text" && -n "$key" ]] || return 1
+
+    printf '%s' "$source_text" \
+        | tr '\r\n' '  ' \
+        | grep -Eiq "\"${key}\"[[:space:]]*:[[:space:]]*\\[[[:space:]]*\\{"
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -1945,7 +1956,8 @@ Telegram-safe sparse create-skill override:
   - TODO: добавить конкретные шаблоны под сценарий навыка.
 - Если create_skill вернул validation/frontmatter error, сразу повтори попытку с этим каноническим scaffold.
 - Если create_skill сообщил, что имя уже занято, кратко скажи об этом и предлагай update/overwrite только по явной команде пользователя.
-- После успешного create_skill ответь коротко, что создан базовый шаблон навыка и его можно доработать следующим сообщением.
+- После успешного create_skill можешь при необходимости в этом же ходе продолжить через update_skill, patch_skill и write_skill_files.
+- Пользователю верни один короткий итог только после завершения всей native CRUD цепочки и не показывай внутренние tool-логи.
 EOF
 }
 
@@ -1967,6 +1979,17 @@ EOF
 
 build_disallowed_tool_runtime_note() {
     local tool_name="${1:-unknown-tool}"
+
+    if current_turn_requires_native_skill_tools_only; then
+        cat <<EOF
+Telegram-safe runtime note:
+- Tool \`${tool_name}\` blocked for the user-facing Telegram skill-CRUD lane.
+- Allow only dedicated skill tools: create_skill, update_skill, patch_skill, delete_skill, write_skill_files, plus session_state/send_message/send_image.
+- Do not call Tavily, browser, arbitrary MCP/web-search, process, cron, or filesystem probes here.
+- Continue text-only, or use only native skill tools for this turn.
+EOF
+        return 0
+    fi
 
     cat <<EOF
 Telegram-safe runtime note:
@@ -2041,21 +2064,21 @@ build_skill_maintenance_reply_text() {
     local skill_name="${2:-}"
 
     if [[ "$target_kind" == "codex_update" ]]; then
-        printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю `codex-update` через внутренние инструменты, логи и чтение файлов. Для простой правки навыка дай явную команду create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+        printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю `codex-update` через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
         return 0
     fi
 
     if [[ "$target_kind" == "generic" ]]; then
-        printf '%s' 'В Telegram-safe режиме я не провожу repair/debug/log inspection через внутренние инструменты, логи и чтение файлов. Если нужна простая правка навыка, дай явную команду create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+        printf '%s' 'В Telegram-safe режиме я не провожу repair/debug/log inspection через внутренние инструменты, логи и чтение файлов. Если нужна простая правка навыка, дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
         return 0
     fi
 
     if [[ -n "$skill_name" && "$skill_name" != "generic" ]]; then
-        printf 'В Telegram-safe режиме я не чиню и не отлаживаю навык `%s` через внутренние инструменты, логи и чтение файлов. Для простой правки скажи явно create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.' "$skill_name"
+        printf 'В Telegram-safe режиме я не чиню и не отлаживаю навык `%s` через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.' "$skill_name"
         return 0
     fi
 
-    printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю навыки через внутренние инструменты, логи и чтение файлов. Для простой правки скажи явно create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+    printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю навыки через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
 }
 
 build_skill_maintenance_hard_override_message() {
@@ -3269,6 +3292,23 @@ tool_call_has_missing_required_arguments() {
         cron)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
             ;;
+        create_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        update_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        patch_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "instructions"
+            ;;
+        delete_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        write_skill_files)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
+            ! json_array_field_has_object_entries_from_text "$arguments_json" "files"
+            ;;
         *)
             return 1
             ;;
@@ -3285,9 +3325,27 @@ extract_tool_call_names() {
         | sed -E 's/^.*"name"[[:space:]]*:[[:space:]]*"//; s/"$//'
 }
 
+current_turn_requires_native_skill_tools_only() {
+    if [[ "${current_turn_skill_visibility_request:-false}" == true || "${current_turn_skill_template_request:-false}" == true || "${current_turn_skill_detail_request:-false}" == true || "${current_turn_skill_apply_request:-false}" == true || "${current_turn_skill_maintenance_request:-false}" == true || "${current_turn_codex_update_maintenance_request:-false}" == true || "${current_turn_generic_maintenance_request:-false}" == true ]]; then
+        return 1
+    fi
+
+    if [[ "${current_turn_skill_mutation_request:-false}" == true || "${looks_like_sparse_skill_create_request:-false}" == true || "${persisted_skill_native_crud_request:-false}" == true || "${persisted_turn_intent:-}" == "skill_native_crud" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 tool_name_is_allowlisted() {
     local tool_name="${1:-}"
-    if tool_name_is_skill_allowlisted "$tool_name" || tool_name_is_tavily_allowlisted "$tool_name"; then
+    if tool_name_is_skill_allowlisted "$tool_name"; then
+        return 0
+    fi
+    if current_turn_requires_native_skill_tools_only; then
+        return 1
+    fi
+    if tool_name_is_tavily_allowlisted "$tool_name"; then
         return 0
     fi
     return 1
@@ -3381,6 +3439,10 @@ tool_calls_only_tavily_allowlisted() {
     local tool_calls_json="${1:-}"
     local saw_name=false
     local tool_name=""
+
+    if current_turn_requires_native_skill_tools_only; then
+        return 1
+    fi
 
     while IFS= read -r tool_name; do
         [[ -n "$tool_name" ]] || continue
@@ -3683,12 +3745,12 @@ if text_looks_like_maintenance_request "$intent_text_flat"; then
 fi
 
 current_turn_skill_mutation_request=false
-if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|исправ(ь|ить)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|fix|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((create|update|patch|delete|fix|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
     current_turn_skill_mutation_request=true
 fi
 
 looks_like_skill_turn=false
-if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|исправ(ь|ить)|патч(ь|ить)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|patch|delete|write_skill_files)[ _-]?skill)'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
     looks_like_skill_turn=true
 fi
 
@@ -3863,6 +3925,7 @@ persisted_codex_update_request=false
 persisted_codex_update_scheduler_request=false
 persisted_codex_update_maintenance_request=false
 persisted_generic_maintenance_request=false
+persisted_skill_native_crud_request=false
 case "${persisted_turn_intent:-}" in
     codex_update)
         persisted_codex_update_request=true
@@ -3876,6 +3939,9 @@ case "${persisted_turn_intent:-}" in
         ;;
     maintenance_generic)
         persisted_generic_maintenance_request=true
+        ;;
+    skill_native_crud)
+        persisted_skill_native_crud_request=true
         ;;
 esac
 if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
@@ -4011,6 +4077,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         next_turn_intent="maintenance_generic"
     elif [[ "$current_turn_skill_maintenance_request" == true ]]; then
         next_turn_intent="skill_maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+    elif [[ "$current_turn_skill_mutation_request" == true || "$looks_like_sparse_skill_create_request" == true ]]; then
+        next_turn_intent="skill_native_crud"
     elif [[ "$current_turn_codex_update_request" == true ]]; then
         if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
             next_turn_intent="codex_update_scheduler"
@@ -4042,6 +4110,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     persisted_codex_update_scheduler_request=false
     persisted_codex_update_maintenance_request=false
     persisted_generic_maintenance_request=false
+    persisted_skill_native_crud_request=false
     case "${persisted_turn_intent:-}" in
         codex_update)
             persisted_codex_update_request=true
@@ -4055,6 +4124,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             ;;
         maintenance_generic)
             persisted_generic_maintenance_request=true
+            ;;
+        skill_native_crud)
+            persisted_skill_native_crud_request=true
             ;;
     esac
 

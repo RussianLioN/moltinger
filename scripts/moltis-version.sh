@@ -178,7 +178,18 @@ compare_release_tags() {
     local right_raw="${2:-}"
     local left=""
     local right=""
+    local left_base=""
+    local left_suffix=""
+    local right_base=""
+    local right_suffix=""
+    local base_compare=""
     local newest=""
+    local max_len=0
+    local i=0
+    local left_part=0
+    local right_part=0
+    local -a left_parts=()
+    local -a right_parts=()
 
     left="$(normalize_release_tag "$left_raw")"
     right="$(normalize_release_tag "$right_raw")"
@@ -188,8 +199,67 @@ compare_release_tags() {
         return 0
     fi
 
-    newest="$(printf '%s\n%s\n' "$left" "$right" | sort -V | tail -n 1)"
-    if [[ "$newest" == "$left" ]]; then
+    if [[ "$left" =~ ^([0-9]+(\.[0-9]+)*)([-.]([0-9A-Za-z._-]+))?$ ]]; then
+        left_base="${BASH_REMATCH[1]}"
+        left_suffix="${BASH_REMATCH[4]:-}"
+    else
+        echo "Unsupported normalized release tag: $left" >&2
+        return 1
+    fi
+
+    if [[ "$right" =~ ^([0-9]+(\.[0-9]+)*)([-.]([0-9A-Za-z._-]+))?$ ]]; then
+        right_base="${BASH_REMATCH[1]}"
+        right_suffix="${BASH_REMATCH[4]:-}"
+    else
+        echo "Unsupported normalized release tag: $right" >&2
+        return 1
+    fi
+
+    IFS='.' read -r -a left_parts <<< "$left_base"
+    IFS='.' read -r -a right_parts <<< "$right_base"
+
+    max_len="${#left_parts[@]}"
+    if (( ${#right_parts[@]} > max_len )); then
+        max_len="${#right_parts[@]}"
+    fi
+
+    base_compare='0'
+    for (( i = 0; i < max_len; i += 1 )); do
+        left_part="${left_parts[i]:-0}"
+        right_part="${right_parts[i]:-0}"
+
+        if (( 10#$left_part > 10#$right_part )); then
+            base_compare='1'
+            break
+        fi
+        if (( 10#$left_part < 10#$right_part )); then
+            base_compare='-1'
+            break
+        fi
+    done
+
+    if [[ "$base_compare" != "0" ]]; then
+        printf '%s\n' "$base_compare"
+        return 0
+    fi
+
+    if [[ -z "$left_suffix" && -z "$right_suffix" ]]; then
+        printf '0\n'
+        return 0
+    fi
+
+    if [[ -z "$left_suffix" ]]; then
+        printf '1\n'
+        return 0
+    fi
+
+    if [[ -z "$right_suffix" ]]; then
+        printf '%s\n' '-1'
+        return 0
+    fi
+
+    newest="$(printf '%s\n%s\n' "$left_suffix" "$right_suffix" | sort -V | tail -n 1)"
+    if [[ "$newest" == "$left_suffix" ]]; then
         printf '1\n'
     else
         printf '%s\n' '-1'

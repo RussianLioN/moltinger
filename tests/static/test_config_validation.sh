@@ -462,11 +462,13 @@ PY
     test_start "static_identity_prompt_forces_sparse_skill_create_to_use_minimal_scaffold_without_template_search"
     if rg -Fq 'Если пользователь в Telegram/DM пишет короткую команду вида `создай навык <name>` или `create <name> skill`' "$TOML_CONFIG" && \
        rg -Fq 'Для такого sparse create запроса не ищи темплейты' "$TOML_CONFIG" && \
+       rg -Fq 'а затем при необходимости дорабатывай skill в том же ходе нативно через `update_skill`, `patch_skill` и `write_skill_files`' "$TOML_CONFIG" && \
+       rg -Fq 'без перечисления внутренних tool id пользователю' "$TOML_CONFIG" && \
        rg -Fq 'После успешного create/update/patch/delete отвечай кратко по результату и не показывай внутренние tool-логи.' "$TOML_CONFIG" && \
        rg -Fq 'Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis identity prompt must keep sparse create native, avoid template/filesystem detours, and require clean result-only skill mutation replies"
+        test_fail "Primary Moltis identity prompt must keep sparse create native, allow same-turn native refinement, avoid raw tool-id leakage in maintenance replies, and require clean result-only skill mutation replies"
     fi
 
     test_start "static_skills_config_enables_native_sidecar_skill_file_writes"

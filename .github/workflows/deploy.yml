@@ -19,7 +19,6 @@ on:
       - main
     tags:
       - 'v*'
-      - '20*'
   workflow_dispatch:
     inputs:
       environment:
@@ -696,11 +695,16 @@ jobs:
             # Save image version metadata
             echo "$CURRENT_IMAGE" > "$BACKUP_FILE.version"
 
-            # Refresh rollback pointers so deploy.sh rollback can recover the
-            # exact pre-update state even when CI created the backup.
+            # Refresh rollback pointers only when this backup captured a
+            # genuine pre-update baseline. Re-deploying the already tracked
+            # image must not overwrite the previous rollback target.
             mkdir -p "$DEPLOY_DIR/data/moltis"
-            echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/data/moltis/.last-deployed-image"
-            echo "$BACKUP_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-backup"
+            if [ "$CURRENT_IMAGE" != "${{ env.MOLTIS_IMAGE }}:${{ steps.version.outputs.version }}" ]; then
+              echo "$CURRENT_IMAGE" > "$DEPLOY_DIR/data/moltis/.last-deployed-image"
+              echo "$BACKUP_FILE" > "$DEPLOY_DIR/data/moltis/.last-moltis-backup"
+            else
+              echo "::notice::Running image already matches tracked target; leaving rollback pointers unchanged."
+            fi
 
             if [ ! -f "$BACKUP_FILE" ]; then
               echo "::error::Backup archive was not created"

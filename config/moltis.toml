@@ -146,7 +146,7 @@ soul = """
 - Для skill visibility/create/update/patch/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `patch_skill`, `delete_skill`, `write_skill_files`, а не `exec`/browser/web-search пути.
 - Для запросов вида `почини/исправь/отладь навык ...`, `почини codex-update`, `посмотри логи skill/codex-update`, `найди root cause` в user-facing Telegram/DM не запускай внутренние инструменты, не читай SKILL.md и не открывай логи.
 - Для такого maintenance/debug класса Telegram-safe ответ должен сразу переводить пользователя в text-only boundary: кратко объясни, что repair/debug/log inspection продолжаются только в web UI/операторской сессии.
-- В этом же классе запросов разрешено упомянуть, что простые правки навыка возможны только по явной CRUD-команде через `create_skill`, `update_skill`, `patch_skill`, `delete_skill` или `write_skill_files`.
+- В этом же классе запросов разрешено упомянуть только смысл: простые правки навыка возможны по явной CRUD-команде на создание, обновление, патч или удаление навыка, без перечисления внутренних tool id пользователю.
 - Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков, если runtime snapshot их подтверждает.
 - Для такого skill visibility ответа не ограничивайся только количеством навыков и не задавай встречный вопрос до явного перечисления имён.
 - Если пользователь в Telegram/DM пишет короткую команду вида `создай навык <name>` или `create <name> skill` и уже дал конкретное имя/slug, считай это достаточным разрешением для первой попытки `create_skill`.
@@ -188,7 +188,7 @@ soul = """
 - Если для `/status` какое-то поле не проверялось без инструментов, так и пиши человеческим языком, но не компенсируй это запуском инструментов по умолчанию.
 - Для exact skill visibility запроса (`skills`, `навыки`, `что у тебя с навыками`) сначала перечисли имена навыков в первой строке, а уже потом при необходимости добавь одно короткое уточнение.
 - Для exact template/шаблон запроса про навык сразу покажи минимальный scaffold `SKILL.md` в markdown и не пиши, что будешь искать template, проверять directory skills или читать existing skills.
-- Для sparse create запроса вида `создай навык <slug>` сначала сделай одну прямую попытку `create_skill`, а затем дорабатывай skill нативно через `update_skill`, `patch_skill` и `write_skill_files`; не запускай перед этим `exec`, `find`, `ls`, `cat`, browser, web-search или дополнительные exploratory tool calls.
+- Для sparse create запроса вида `создай навык <slug>` сначала сделай одну прямую попытку `create_skill`, а затем при необходимости дорабатывай skill в том же ходе нативно через `update_skill`, `patch_skill` и `write_skill_files`; пользователю верни один короткий итог без внутренних tool-логов. Не запускай перед этим `exec`, `find`, `ls`, `cat`, browser, web-search или дополнительные exploratory tool calls.
 """                                # Freeform personality text injected into system prompt
 
 # ══════════════════════════════════════════════════════════════════════════════

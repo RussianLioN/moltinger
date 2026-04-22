@@ -85,7 +85,7 @@ run_component_telegram_safe_llm_guard_tests() {
         env PATH="$MINIMAL_PATH" \
             MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"BeforeLLMCall","data":{"session_key":"session:skill-research","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Изучи официальную документацию Moltis и исправь навык codex-update так, чтобы он лучше работал в Telegram"}],"tool_count":37,"iteration":1}}
+{"event":"BeforeLLMCall","data":{"session_key":"session:skill-research","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Изучи официальную документацию Moltis и обнови навык codex-update так, чтобы он лучше работал в Telegram"}],"tool_count":37,"iteration":1}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_research_output" && \
@@ -96,7 +96,7 @@ EOF
        jq -e '([.data.messages[].content] | join("\n")) | contains("Telegram-safe skill-detail hard override") | not' >/dev/null 2>&1 <<<"$before_llm_skill_research_output"; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must not collapse explicit skill mutation turns into the long-research hard override when the owner asks to study docs and fix a skill"
+        test_fail "BeforeLLMCall guard must not collapse explicit update/patch skill turns into the long-research hard override when the owner asks to study docs and then update a skill"
     fi
 
     test_start "component_before_llm_guard_routes_sparse_skill_create_into_native_tool_lane"
@@ -117,11 +117,13 @@ EOF
        jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[2].content | contains("После успешного create_skill можешь при необходимости в этом же ходе продолжить через update_skill, patch_skill и write_skill_files.")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
+       jq -e '.data.messages[2].content | contains("Пользователю верни один короткий итог")' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        jq -e '.data.messages[-1].content == "Давай создадим навык codex-update-new"' >/dev/null 2>&1 <<<"$before_llm_skill_turn_output" && \
        [[ ! -f "$before_llm_skill_turn_file" ]]; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must keep sparse Telegram skill creation on the native tool lane: preserve tool budget, inject authoring guidance, and avoid repo-owned scaffold writes"
+        test_fail "BeforeLLMCall guard must keep sparse Telegram skill creation on the native tool lane, allow same-turn native refinement, and avoid repo-owned scaffold writes"
     fi
 
     test_start "component_before_llm_guard_hard_overrides_skill_visibility_queries_to_deterministic_runtime_list"
@@ -2039,10 +2041,10 @@ EOF
        jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
        jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
        [[ ! -f "$stale_visibility_create_file" ]] && \
-       [[ -z "$stale_visibility_create_intent" ]]; then
+       [[ "$stale_visibility_create_intent" == *$'\tskill_native_crud\t'* ]]; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must keep create follow-ups on the native tool lane and must not revive repo-owned create persistence or scaffold writes"
+        test_fail "BeforeLLMCall guard must keep create follow-ups on the native tool lane, clear stale visibility intent, and persist only the current native CRUD lane without scaffold writes"
     fi
 
     test_start "component_message_sending_guard_drops_legacy_skill_create_intent_rewrite"
@@ -2345,6 +2347,27 @@ EOF
         test_fail "BeforeToolCall guard must rewrite malformed known-tool calls into a harmless exec no-op outside Telegram-safe lane as well"
     fi
 
+    test_start "component_before_tool_guard_suppresses_malformed_skill_crud_calls"
+    local before_tool_patch_malformed_output before_tool_write_files_malformed_output
+    before_tool_patch_malformed_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:tool-patch-malformed","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"patch_skill","arguments":{"name":"codex-update"}}}'
+    )"
+    before_tool_write_files_malformed_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:tool-write-files-malformed","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"write_skill_files","arguments":{"name":"codex-update","files":[]}}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_patch_malformed_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_patch_malformed_output" && \
+       jq -e '.data.arguments.command == "true"' >/dev/null 2>&1 <<<"$before_tool_patch_malformed_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_write_files_malformed_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_write_files_malformed_output" && \
+       jq -e '.data.arguments.command == "true"' >/dev/null 2>&1 <<<"$before_tool_write_files_malformed_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must fail closed on malformed patch_skill/write_skill_files calls instead of letting raw validation errors leak back to Telegram"
+    fi
+
     test_start "component_before_tool_guard_allows_tavily_passthrough_in_safe_lane"
     local before_tool_tavily_output
     before_tool_tavily_output="$(
@@ -2355,6 +2378,33 @@ EOF
         test_pass
     else
         test_fail "BeforeToolCall guard must keep allowlisted Tavily research MCP tools intact instead of rewriting them into synthetic exec payloads"
+    fi
+
+    test_start "component_before_tool_guard_blocks_tavily_on_persisted_skill_native_crud_intent"
+    local skill_mutation_before_tool_dir before_tool_skill_mutation_tavily_output
+    skill_mutation_before_tool_dir="$(secure_temp_dir telegram-safe-before-tool-skill-mutation)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_mutation_before_tool_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillmutation-tool","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"Обнови навык codex-update так, чтобы он лучше работал в Telegram"}],"tool_count":37,"iteration":1}}
+EOF
+    before_tool_skill_mutation_tavily_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$skill_mutation_before_tool_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeToolCall","session_key":"session:skillmutation-tool","tool_name":"mcp__tavily__tavily_search","arguments":{"query":"codex-update skill best practices"}}
+EOF
+    )"
+    rm -rf "$skill_mutation_before_tool_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_skill_mutation_tavily_output" && \
+       jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$before_tool_skill_mutation_tavily_output" && \
+       jq -e '.data.tool_name == "exec"' >/dev/null 2>&1 <<<"$before_tool_skill_mutation_tavily_output" && \
+       jq -e '.data.arguments.command | contains("Telegram skill-CRUD lane")' >/dev/null 2>&1 <<<"$before_tool_skill_mutation_tavily_output" && \
+       jq -e '.data.arguments.command | contains("Do not call Tavily")' >/dev/null 2>&1 <<<"$before_tool_skill_mutation_tavily_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must block Tavily on persisted native skill CRUD turns and keep those turns on dedicated skill tools only"
     fi
 
     test_start "component_before_tool_guard_blocks_allowlisted_tavily_when_skill_detail_intent_is_persisted"
@@ -2600,6 +2650,32 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must preserve allowlisted Tavily tool calls and replace leaked planning only with a generic safe progress line"
+    fi
+
+    test_start "component_after_llm_guard_fails_closed_on_tavily_for_persisted_skill_native_crud_turn"
+    local after_skill_tavily_dir after_skill_tavily_output
+    after_skill_tavily_dir="$(secure_temp_dir telegram-safe-after-skill-tavily)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_tavily_dir" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:skill-tavily-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984"},{"role":"user","content":"Обнови навык codex-update так, чтобы он лучше работал в Telegram"}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_tavily_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_tavily_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skill-tavily-after","provider":"openai-codex","model":"gpt-5.4","text":"Сейчас обновлю навык и параллельно проверю best practices через Tavily.","tool_calls":[{"name":"mcp__tavily__tavily_search","arguments":{"query":"codex-update skill best practices"}}]}}
+EOF
+    )"
+    rm -rf "$after_skill_tavily_dir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_tavily_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_tavily_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты")' >/dev/null 2>&1 <<<"$after_skill_tavily_output" && \
+       jq -e '.data.text | contains("web UI")' >/dev/null 2>&1 <<<"$after_skill_tavily_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must fail closed when a persisted native skill CRUD turn drifts into Tavily instead of preserving that Tavily plan"
     fi
 
     test_start "component_after_llm_guard_uses_generic_progress_text_for_mixed_skill_and_tavily_tool_calls"
@@ -3317,10 +3393,10 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
        jq -e '.data.text | contains("не чиню и не отлаживаю `codex-update`")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
-       jq -e '.data.text | contains("create_skill/update_skill/delete_skill")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
+       jq -e '.data.text | contains("CRUD-команду на создание, обновление, патч или удаление навыка")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
        jq -e '.data.text | contains("web UI/операторской сессии")' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
        jq -e '.data.reply_to_message_id == 965' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output" && \
-       jq -e '.data.text | test("Activity log|Running:|Searching memory|missing '\''command'\'' parameter|missing '\''query'\'' parameter|SKILL.md|/home/moltis") | not' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output"; then
+       jq -e '.data.text | test("Activity log|Running:|Searching memory|missing '\''command'\'' parameter|missing '\''query'\'' parameter|SKILL.md|/home/moltis|create_skill|update_skill|patch_skill|delete_skill|write_skill_files") | not' >/dev/null 2>&1 <<<"$codex_update_maintenance_message_output"; then
         test_pass
     else
         test_fail "MessageSending guard must rewrite leaked codex-update maintenance/debug runtime chatter into the deterministic Telegram-safe boundary reply"
@@ -3345,10 +3421,10 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
        jq -e '.data.text | contains("навык `post-close-task-classifier`")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
-       jq -e '.data.text | contains("create_skill/update_skill/delete_skill")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
+       jq -e '.data.text | contains("CRUD-команду на создание, обновление, патч или удаление навыка")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
        jq -e '.data.text | contains("web UI/операторской сессии")' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
        jq -e '.data.reply_to_message_id == 966' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output" && \
-       jq -e '.data.text | test("Activity log|missing '\''command'\'' parameter|SKILL.md|exec|/home/moltis") | not' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output"; then
+       jq -e '.data.text | test("Activity log|missing '\''command'\'' parameter|SKILL.md|exec|/home/moltis|create_skill|update_skill|patch_skill|delete_skill|write_skill_files") | not' >/dev/null 2>&1 <<<"$skill_maintenance_plain_message_output"; then
         test_pass
     else
         test_fail "MessageSending guard must rewrite plain skill-maintenance runtime failures even when the leaked text no longer includes an explicit Activity log block"
