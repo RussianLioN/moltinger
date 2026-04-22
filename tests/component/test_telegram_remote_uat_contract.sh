@@ -1191,6 +1191,134 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "skill_update_success_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: обновил навык codex-update и сохранил изменения.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_update_missing_name_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: обновил навык и сохранил изменения.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_delete_success_reply_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: удалил навык codex-update из списка доступных навыков.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "skill_delete_missing_name_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Готово: удалил навык из списка доступных навыков.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 base_payload="$(cat <<'JSON'
 {
   "ok": false,
@@ -1329,6 +1457,32 @@ case "$url" in
         ;;
       create_already_exists)
         body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"},{"name":"codex-update-new"}]}'
+        ;;
+      update_persisted)
+        body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        ;;
+      update_missing_target)
+        body='{"skills":[{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        ;;
+      update_not_visible_after_mutation)
+        if [[ "$skills_call_count" -eq 1 ]]; then
+          body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        else
+          body='{"skills":[{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        fi
+        ;;
+      delete_removed)
+        if [[ "$skills_call_count" -eq 1 ]]; then
+          body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        else
+          body='{"skills":[{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        fi
+        ;;
+      delete_missing_target)
+        body='{"skills":[{"name":"template-skill"},{"name":"telegram-learner"}]}'
+        ;;
+      delete_not_removed)
+        body='{"skills":[{"name":"codex-update"},{"name":"template-skill"},{"name":"telegram-learner"}]}'
         ;;
       empty_skills)
         body='{"skills":[]}'
@@ -2193,6 +2347,182 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must require a true pre->post creation transition rather than passing when the skill name was already present"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_update_when_target_exists_before_send_and_remains_visible_after_reply"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-update-persisted" \
+        MOLTIS_CURL_STUB_MODE=update_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_update_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Обнови навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-update-persisted.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow Telegram skill update only when the target existed before send and remains visible in live /api/skills after the reply"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_update_when_target_missing_before_send"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-update-missing-target" \
+        MOLTIS_CURL_STUB_MODE=update_missing_target \
+        TELEGRAM_WEB_STUB_MODE=skill_update_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Обнови навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-update-missing-target.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill update when the target skill was missing before the mutation turn"
+    else
+        if jq -e '.failure.code == "semantic_skill_update_missing_target_before_send" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-update-missing-target.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.requested_skill_name == "codex-update"' "$TEST_TMPDIR/result-skill-update-missing-target.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must produce an update-specific missing-target-before-send failure when the requested skill did not exist in the baseline"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_update_when_reply_does_not_name_target_skill"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-update-name-mismatch" \
+        MOLTIS_CURL_STUB_MODE=update_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_update_missing_name_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Обнови навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-update-name-mismatch.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill update when the user-facing reply does not mention the target skill name"
+    else
+        if jq -e '.failure.code == "semantic_skill_update_reply_name_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-update-name-mismatch.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must produce an update-specific reply-name mismatch failure when the target skill is not named in the reply"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_update_when_target_disappears_after_reply"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-update-disappeared" \
+        MOLTIS_CURL_STUB_MODE=update_not_visible_after_mutation \
+        TELEGRAM_WEB_STUB_MODE=skill_update_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Обнови навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-update-disappeared.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill update when the target skill is no longer visible after the mutation reply"
+    else
+        if jq -e '.failure.code == "semantic_skill_update_not_visible_after_mutation" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-update-disappeared.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require the updated target skill to remain visible in live /api/skills after the mutation"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_delete_when_target_exists_before_send_and_disappears_after_reply"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-removed" \
+        MOLTIS_CURL_STUB_MODE=delete_removed \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-delete-removed.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow Telegram skill delete only when the target existed before send and disappears from live /api/skills after the reply"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_delete_when_target_missing_before_send"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-missing-target" \
+        MOLTIS_CURL_STUB_MODE=delete_missing_target \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-delete-missing-target.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill delete when the target skill was missing before the mutation turn"
+    else
+        if jq -e '.failure.code == "semantic_skill_delete_missing_target_before_send" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-delete-missing-target.json" >/dev/null 2>&1 \
+            && jq -e '.diagnostic_context.semantic_review.requested_skill_name == "codex-update"' "$TEST_TMPDIR/result-skill-delete-missing-target.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must produce a delete-specific missing-target-before-send failure when the requested skill did not exist in the baseline"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_delete_when_reply_does_not_name_target_skill"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-name-mismatch" \
+        MOLTIS_CURL_STUB_MODE=delete_removed \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_missing_name_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-delete-name-mismatch.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill delete when the user-facing reply does not mention the target skill name"
+    else
+        if jq -e '.failure.code == "semantic_skill_delete_reply_name_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-delete-name-mismatch.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must produce a delete-specific reply-name mismatch failure when the target skill is not named in the reply"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_skill_delete_when_target_still_visible_after_reply"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-still-visible" \
+        MOLTIS_CURL_STUB_MODE=delete_not_removed \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update" \
+        --output "$TEST_TMPDIR/result-skill-delete-still-visible.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail skill delete when the target skill remains visible after the mutation reply"
+    else
+        if jq -e '.failure.code == "semantic_skill_delete_still_visible_after_mutation" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-skill-delete-still-visible.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must require the deleted target skill to disappear from live /api/skills after the mutation"
         fi
     fi
 

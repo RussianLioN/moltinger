@@ -146,6 +146,32 @@ Authoritative `Telegram Web` probe больше не принимает перв
 - если сообщение `/status` не показывает текущую pinned Telegram-safe модель
   `openai-codex::gpt-5.4`, verdict тоже должен стать `failed`.
 
+### Как authoritative path теперь трактует skill mutation turns
+
+Для skill mutation authoritative wrapper теперь умеет review-safe semantic proof не только для `create`, но и для `update/delete`.
+
+Текущие правила:
+
+1. Для `create` wrapper доказывает:
+   - был снят pre-send baseline live `/api/skills`
+   - requested skill name не существовал до send
+   - requested skill name появился после mutation
+   - immediate follow-up visibility reply называет новый skill по имени
+2. Для `update` wrapper доказывает:
+   - target skill существовал до send
+   - target skill остаётся видимым после mutation
+   - user-facing reply явно называет target skill
+3. Для `delete` wrapper доказывает:
+   - target skill существовал до send
+   - target skill исчез из live `/api/skills` после mutation
+   - user-facing reply явно называет target skill
+
+Guardrails:
+
+- mutation proof остаётся review-safe и не считается успешным при `Activity log`, internal planning, raw tool leakage или host-path leakage;
+- wrapper не должен скрыто запускать destructive automation вне явного operator-triggered mutation turn;
+- live production mutation UAT должен выполняться осознанно, с конкретным target skill name и понятным post-run cleanup plan там, где это нужно оператору.
+
 ## Failure Codes
 
 Authoritative Telegram Web path различает минимум:
@@ -162,10 +188,15 @@ Authoritative Telegram Web path различает минимум:
 - `semantic_codex_update_false_negative`
 - `semantic_codex_update_remote_contract_violation`
 - `semantic_codex_update_state_memory_false_negative`
+- `semantic_skill_create_*`
+- `semantic_skill_update_*`
+- `semantic_skill_delete_*`
 
 Для `codex-update`-запросов это значит ещё одно правило: если remote user-facing reply обещает operator-only runtime path вроде `make codex-update` или server-side обновление локальной машины пользователя, authoritative verdict должен быть `failed`, даже если helper payload выглядит зелёным.
 
 Отдельно для вопросов про сохранённое состояние `codex-update`: если reply делает выводы вида `в памяти не найдено`, `в базе не зафиксировано` или аналогично подменяет runtime state общим memory-search path, authoritative verdict тоже должен быть `failed`.
+
+Для skill mutation-запросов это значит ещё одно правило: authoritative verdict не должен становиться `passed`, если target skill не удалось доказать через pre-send baseline + post-reply live `/api/skills` state transition, даже когда сам Telegram helper payload выглядит зелёным.
 
 ## Restricted Debug Bundle
 
