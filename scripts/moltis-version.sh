@@ -215,9 +215,6 @@ main() {
         assert-tracked)
             assert_tracked_contract
             ;;
-        normalize-tag)
-            normalize_release_tag "${2:-}"
-            ;;
         compare)
             compare_release_tags "${2:-}" "${3:-}"
             ;;
