@@ -206,7 +206,7 @@ reply_has_internal_activity() {
   [[ -n "$normalized" ]] || return 1
 
   case "$normalized" in
-    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*|*"mcp tool error"*|*"validation errors for call["*|*"missing required argument"*|*"unexpected keyword argument"*|*"fetching github.com"*|*"fetching http://"*|*"fetching https://"*)
+    *"activity log"*|*"running:"*|*"searching memory"*|*"memory_search"*|*"thinking..."*|*"tool_call_started"*|*"tool_call_progress"*|*"mcp__"*|*"mcp tool error"*|*"validation errors for call["*|*"missing required argument"*|*"unexpected keyword argument"*|*"fetching github.com"*|*"fetching http://"*|*"fetching https://"*|*"create_skill"*|*"update_skill"*|*"patch_skill"*|*"delete_skill"*|*"write_skill_files"*)
       return 0
       ;;
   esac
@@ -219,7 +219,7 @@ reply_has_internal_planning_leak() {
   normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|как пример|mcp__|mounted workspace|skill files|existing skills|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
+  if printf '%s' "$normalized" | grep -Eiq 'пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|сейчас проверю|проверю источник|вернусь с ответом|вернусь с кратким планом|let me|checking|opening|looking up|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (получу|найду|изучу|посмотрю|открою|проверю|проанализирую|сделаю)|давай наконец(-то)?( это)? сделаю( правильно)?|хорошо,?[[:space:]]*(изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|наш[её]л официальный (репозиторий|документац)|github|полную документацию|чита(ю|ем).{0,80}(существующ(ий|его)|имеющ(ийся|егося)).{0,80}(навык|skill)|найд(у|ем).{0,80}(документац|docs|documentation|manual|guide|инструкц)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|как пример|mcp__|mounted workspace|skill files|existing skills|create_skill|update_skill|patch_skill|delete_skill|write_skill_files|существующ(ий|ие|его) навык|имеющ(егося|ийся) навы'; then
     return 0
   fi
 
@@ -246,6 +246,18 @@ message_is_skill_create_query() {
   [[ -n "$normalized" ]] || return 1
 
   if printf '%s' "$normalized" | grep -Eiq '(созда(й|йте|дим|ть|вать)|создать|создай|создадим|create|build|make).{0,40}(навык|skill)|(навык|skill).{0,24}(созда|create)'; then
+    return 0
+  fi
+
+  return 1
+}
+
+message_is_skill_mutation_query() {
+  local normalized
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if message_is_skill_create_query "$normalized" || message_is_skill_update_query "$normalized" || message_is_skill_delete_query "$normalized"; then
     return 0
   fi
 

@@ -51,45 +51,17 @@ jobs:
 
           TRACKED_VERSION="$(bash ./scripts/moltis-version.sh version)"
           LATEST_RELEASE_TAG="$(gh api repos/moltis-org/moltis/releases/latest --jq '.tag_name')"
-          CANDIDATE_VERSION="${LATEST_RELEASE_TAG#v}"
           FORCE_MODE="${FORCE_INPUT}"
+          resolver_args=(
+            --tracked-version "$TRACKED_VERSION"
+            --latest-release-tag "$LATEST_RELEASE_TAG"
+          )
 
-          {
-            echo "tracked_version=$TRACKED_VERSION"
-            echo "latest_release_tag=$LATEST_RELEASE_TAG"
-            echo "candidate_version=$CANDIDATE_VERSION"
-          } >> "$GITHUB_OUTPUT"
-
-          if [[ ! "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]; then
-            echo "::error::Latest release tag '$LATEST_RELEASE_TAG' does not normalize to a valid GHCR runtime tag"
-            exit 1
+          if [[ "$FORCE_MODE" == "true" ]]; then
+            resolver_args+=(--force)
           fi
 
-          if [[ "$CANDIDATE_VERSION" == "$TRACKED_VERSION" ]]; then
-            {
-              echo "should_update=false"
-              echo "skip_reason=tracked version already equals latest release candidate"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "$FORCE_MODE" != "true" ]]; then
-            NEWEST="$(printf '%s\n%s\n' "$TRACKED_VERSION" "$CANDIDATE_VERSION" | sort -V | tail -n1)"
-            if [[ "$NEWEST" != "$CANDIDATE_VERSION" ]]; then
-              {
-                echo "should_update=false"
-                echo "skip_reason=latest release candidate is not newer than tracked version"
-              } >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-
-          if ! docker manifest inspect "ghcr.io/moltis-org/moltis:$CANDIDATE_VERSION" >/dev/null 2>&1; then
-            echo "::error::Normalized GHCR tag ghcr.io/moltis-org/moltis:$CANDIDATE_VERSION is not pullable"
-            exit 1
-          fi
-
-          echo "should_update=true" >> "$GITHUB_OUTPUT"
+          bash ./scripts/moltis-update-proposal-resolver.sh "${resolver_args[@]}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare proposal branch
         id: branch
@@ -152,7 +124,7 @@ jobs:
           ## Safety checks already passed
 
           - upstream release discovered from official \`moltis-org/moltis\`
-          - release tag normalized to GHCR runtime tag (\`vX.Y.Z -> X.Y.Z\`)
+          - release tag normalized and validated against explicit GHCR runtime tag rules
           - \`ghcr.io/moltis-org/moltis:${CANDIDATE_VERSION}\` is pullable
           - compose tracked defaults updated consistently
 

@@ -1083,6 +1083,20 @@
       "gitops": true,
       "cron": "37 1 * * *"
     },
+    "moltis-update-proposal-resolver.sh": {
+      "version": "1.0.0",
+      "description": "Resolve the tracked Moltis update proposal candidate and validate that the normalized GHCR tag is pullable",
+      "entrypoint": true,
+      "requires": [
+        "bash",
+        "docker",
+        "sort"
+      ],
+      "provides": [
+        "moltis-update-proposal-resolver"
+      ],
+      "ci": true
+    },
     "moltis-version.sh": {
       "version": "1.0.0",
       "description": "Resolve and validate the tracked Moltis image version from git-managed compose files",

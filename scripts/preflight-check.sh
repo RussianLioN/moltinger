@@ -138,7 +138,6 @@ configure_target() {
                 "moltis_password"
                 "telegram_bot_token"
                 "tavily_api_key"
-                "glm_api_key"
             )
             OPTIONAL_SECRETS=(
                 "smtp_password"

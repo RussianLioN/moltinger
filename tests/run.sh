@@ -164,6 +164,7 @@ suite_entries_for_lane() {
             printf '%s\n' \
                 "bash|component_backup_restore_readiness|Backup restore-readiness component|$SCRIPT_DIR/component/test_backup_restore_readiness.sh" \
                 "bash|component_moltis_version_helper|Moltis version helper component|$SCRIPT_DIR/component/test_moltis_version_helper.sh" \
+                "bash|component_moltis_update_proposal_resolver|Moltis update proposal resolver component|$SCRIPT_DIR/component/test_moltis_update_proposal_resolver.sh" \
                 "bash|component_prepare_moltis_runtime_config|Prepare Moltis runtime config component|$SCRIPT_DIR/component/test_prepare_moltis_runtime_config.sh" \
                 "bash|component_circuit_breaker|Circuit breaker component|$SCRIPT_DIR/component/test_circuit_breaker.sh" \
                 "bash|component_prometheus_metrics|Prometheus metrics component|$SCRIPT_DIR/component/test_prometheus_metrics.sh" \
@@ -197,6 +198,7 @@ suite_entries_for_lane() {
                 "bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh" \
                 "bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh" \
                 "bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh" \
+                "bash|component_telegram_safe_llm_guard|Telegram safe LLM guard component|$SCRIPT_DIR/component/test_telegram_safe_llm_guard.sh" \
                 "bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh" \
                 "bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh" \
                 "bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh"

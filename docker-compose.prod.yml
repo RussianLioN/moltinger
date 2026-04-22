@@ -27,7 +27,7 @@ services:
   # MOLTIS - Main Application
   # ========================================================================
   moltis:
-    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-0.10.18}
+    image: ghcr.io/moltis-org/moltis:${MOLTIS_VERSION:-20260421.05}
     container_name: moltis
     restart: unless-stopped
     stop_grace_period: 45s
@@ -69,8 +69,6 @@ services:
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       # Tavily API for MCP server
       TAVILY_API_KEY: ${TAVILY_API_KEY}
-      # GLM-5.1 API key for official BigModel Coding Plan (OpenAI-compatible)
-      GLM_API_KEY: ${GLM_API_KEY}
       # Ollama Cloud API key for cloud-backed fallback chat models
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
 

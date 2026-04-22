@@ -31,7 +31,7 @@ Operational policy in this repository:
 - Do not replay production deploy steps manually from a feature branch after workflow branch guards block promotion.
 - Use `.github/workflows/feature-diagnostics.yml` for read-only branch evidence, then promote to `main` before production rollout.
 - Do not pin a GitHub release tag unless the matching GHCR container tag is actually published.
-- Do not keep a leading `v` in tracked GHCR tags (use `0.10.18`, not `v0.10.18`).
+- Do not keep a leading `v` in tracked GHCR tags (use `20260421.05`, not `v20260421.05`).
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.
 - Do not continue rollout if restore-check fails for that fresh backup.
 - Do not treat "previous image exists" as sufficient rollback evidence by itself.
@@ -118,7 +118,7 @@ GitHub Actions path:
 - `workflow_dispatch` target is production-only
 - release-tag deploy is allowed only when tag SHA matches current `origin/main` HEAD
 - manual version input defaults to blank and must equal tracked git version if provided
-- tracked version regression versus currently running semver image is blocked
+- tracked version regression versus the currently running explicit release tag is blocked
 - backup step must finish successfully
 - restore-readiness validation must finish successfully
 - only then may the new Moltis image be pulled and started
