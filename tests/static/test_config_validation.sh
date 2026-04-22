@@ -453,7 +453,7 @@ PY
        rg -Fq 'Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.' "$TOML_CONFIG" && \
        rg -Fq 'Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков' "$TOML_CONFIG" && \
        rg -Fq 'Для такого skill visibility ответа не ограничивайся только количеством навыков' "$TOML_CONFIG" && \
-       rg -Fq 'Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`' "$TOML_CONFIG"; then
+       rg -Fq 'Для skill visibility/create/update/patch/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `patch_skill`, `delete_skill`, `write_skill_files`' "$TOML_CONFIG"; then
         test_pass
     else
         test_fail "Primary Moltis identity prompt must prevent skill false negatives, force direct skill-name listing for visibility questions, and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
@@ -462,11 +462,18 @@ PY
     test_start "static_identity_prompt_forces_sparse_skill_create_to_use_minimal_scaffold_without_template_search"
     if rg -Fq 'Если пользователь в Telegram/DM пишет короткую команду вида `создай навык <name>` или `create <name> skill`' "$TOML_CONFIG" && \
        rg -Fq 'Для такого sparse create запроса не ищи темплейты' "$TOML_CONFIG" && \
-       rg -Fq 'Для sparse create сам сгенерируй валидный минимальный scaffold' "$TOML_CONFIG" && \
+       rg -Fq 'После успешного create/update/patch/delete отвечай кратко по результату и не показывай внутренние tool-логи.' "$TOML_CONFIG" && \
        rg -Fq 'Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis identity prompt must force short named skill-create requests into immediate minimal create_skill scaffolding instead of template search or preliminary questioning"
+        test_fail "Primary Moltis identity prompt must keep sparse create native, avoid template/filesystem detours, and require clean result-only skill mutation replies"
+    fi
+
+    test_start "static_skills_config_enables_native_sidecar_skill_file_writes"
+    if rg -Fq 'enable_agent_sidecar_files = true' "$TOML_CONFIG"; then
+        test_pass
+    else
+        test_fail "Primary Moltis config must enable native sidecar skill file writes so Telegram owner DM can refine personal skills without repo-owned scaffold hacks"
     fi
 
     test_start "static_deploy_verifies_project_local_telegram_safe_hook_bundle_visibility"
@@ -628,12 +635,10 @@ PY
     test_start "static_moltis_version_contract_stays_git_tracked_and_pinned"
     if [[ -x "$MOLTIS_VERSION_SCRIPT" ]] && \
        "$MOLTIS_VERSION_SCRIPT" assert-tracked && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != v* ]] && \
-       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" != "latest" ]]; then
+       [[ "$("$MOLTIS_VERSION_SCRIPT" version)" =~ ^([0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?|20[0-9]{6}\.[0-9]{2}([-.][0-9A-Za-z._-]+)?)$ ]]; then
         test_pass
     else
-        test_fail "Tracked Moltis version must resolve to an explicit GHCR tag without leading v and be validated by scripts/moltis-version.sh"
+        test_fail "Tracked Moltis version must resolve to an explicit GHCR release tag (semver or calendar tag), stay without leading v, and be validated by scripts/moltis-version.sh"
     fi
 
     test_start "static_fixture_uses_codex_primary_without_legacy_openai_provider"
@@ -1237,7 +1242,7 @@ PY
     test_start "static_deploy_blocks_tracked_version_regression_against_running_baseline"
     if rg -q 'Prevent tracked version regressions against running production baseline' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
        rg -q 'Tracked Moltis version regression detected' "$PROJECT_ROOT/.github/workflows/deploy.yml" && \
-       rg -q 'sort -V' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
+       rg -q 'scripts/moltis-version\.sh compare' "$PROJECT_ROOT/.github/workflows/deploy.yml"; then
         test_pass
     else
         test_fail "Deploy workflow must block tracked version regressions when running production Moltis version is newer"

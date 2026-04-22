@@ -6,20 +6,34 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_DEV="$PROJECT_ROOT/docker-compose.yml"
 COMPOSE_PROD="$PROJECT_ROOT/docker-compose.prod.yml"
 MOLTIS_IMAGE_PREFIX="ghcr.io/moltis-org/moltis:"
-EXPLICIT_GHCR_TAG_REGEX='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
 
 usage() {
     cat <<'EOF'
-Usage: scripts/moltis-version.sh {version|image|assert-tracked}
+Usage: scripts/moltis-version.sh {version|image|assert-tracked|normalize-tag|compare}
 
 Commands:
   version         Print the tracked Moltis version from compose files
   image           Print the tracked Moltis image reference from compose files
-  normalize-tag   Normalize a release tag into an explicit GHCR runtime tag
-                  (for example: v0.10.18 -> 0.10.18)
   assert-tracked  Fail unless docker-compose.yml and docker-compose.prod.yml
                   resolve to the same pinned Moltis image (not latest)
+  normalize-tag   Normalize an upstream release tag into a pullable GHCR tag
+  compare         Compare two explicit release tags (-1 left<right, 0 eq, 1 left>right)
 EOF
+}
+
+is_semver_release_tag() {
+    local version="${1:-}"
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z._-]+)?$ ]]
+}
+
+is_calendar_release_tag() {
+    local version="${1:-}"
+    [[ "$version" =~ ^20[0-9]{6}\.[0-9]{2}([-.][0-9A-Za-z._-]+)?$ ]]
+}
+
+is_explicit_release_tag() {
+    local version="${1:-}"
+    is_semver_release_tag "$version" || is_calendar_release_tag "$version"
 }
 
 extract_image_ref_from_file() {
@@ -75,6 +89,28 @@ normalize_version_from_image_ref() {
     printf '%s\n' "$suffix"
 }
 
+normalize_release_tag() {
+    local raw_tag="${1:-}"
+    local normalized="${raw_tag#v}"
+
+    if [[ -z "$raw_tag" ]]; then
+        echo "Release tag is empty" >&2
+        return 1
+    fi
+
+    if [[ "$normalized" == "latest" ]]; then
+        echo "Explicit Moltis release tag required; 'latest' is not allowed here" >&2
+        return 1
+    fi
+
+    if ! is_explicit_release_tag "$normalized"; then
+        echo "Unsupported Moltis release tag format: $raw_tag" >&2
+        return 1
+    fi
+
+    printf '%s\n' "$normalized"
+}
+
 normalize_image_ref() {
     local image_ref="$1"
     local version=""
@@ -121,33 +157,43 @@ assert_explicit_release_tag() {
     fi
 
     if [[ "$version" == v* ]]; then
-        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 0.10.18 or 20260420.02)" >&2
+        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 20260421.05)" >&2
         return 1
     fi
 
-    if [[ ! "$version" =~ $EXPLICIT_GHCR_TAG_REGEX ]]; then
-        echo "Tracked Moltis version is not a valid explicit GHCR release tag: $version" >&2
+    if ! is_explicit_release_tag "$version"; then
+        echo "Tracked Moltis version is not a supported explicit release tag: $version" >&2
         return 1
     fi
-}
-
-normalize_release_tag() {
-    local raw_tag="${1:-}"
-    local normalized_tag="${raw_tag#v}"
-
-    if [[ -z "$raw_tag" ]]; then
-        echo "Release tag is empty" >&2
-        return 1
-    fi
-
-    assert_explicit_release_tag "$normalized_tag"
-    printf '%s\n' "$normalized_tag"
 }
 
 assert_tracked_contract() {
     local version
     version="$(tracked_moltis_version)"
     assert_explicit_release_tag "$version"
+}
+
+compare_release_tags() {
+    local left_raw="${1:-}"
+    local right_raw="${2:-}"
+    local left=""
+    local right=""
+    local newest=""
+
+    left="$(normalize_release_tag "$left_raw")"
+    right="$(normalize_release_tag "$right_raw")"
+
+    if [[ "$left" == "$right" ]]; then
+        printf '0\n'
+        return 0
+    fi
+
+    newest="$(printf '%s\n%s\n' "$left" "$right" | sort -V | tail -n 1)"
+    if [[ "$newest" == "$left" ]]; then
+        printf '1\n'
+    else
+        printf '%s\n' '-1'
+    fi
 }
 
 main() {
@@ -168,6 +214,12 @@ main() {
             ;;
         assert-tracked)
             assert_tracked_contract
+            ;;
+        normalize-tag)
+            normalize_release_tag "${2:-}"
+            ;;
+        compare)
+            compare_release_tags "${2:-}" "${3:-}"
             ;;
         -h|--help|help)
             usage

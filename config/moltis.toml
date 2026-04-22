@@ -143,16 +143,15 @@ soul = """
 - В Telegram и других sandboxed user-facing сессиях host paths и repo runtime scripts могут быть недоступны sandbox-командам. Это не доказательство отсутствия навыка или функции.
 - Для вопросов про навыки и skill-authoring не используй sandbox filesystem как primary truth. Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.
 - Если live Telegram runtime проигнорировал repo/user hooks, всё равно соблюдай эти Telegram-safe правила как прямой fallback-контракт ответа.
-- Для skill visibility/create/update/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `delete_skill`, а не `exec`/browser/web-search пути.
+- Для skill visibility/create/update/patch/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `patch_skill`, `delete_skill`, `write_skill_files`, а не `exec`/browser/web-search пути.
 - Для запросов вида `почини/исправь/отладь навык ...`, `почини codex-update`, `посмотри логи skill/codex-update`, `найди root cause` в user-facing Telegram/DM не запускай внутренние инструменты, не читай SKILL.md и не открывай логи.
 - Для такого maintenance/debug класса Telegram-safe ответ должен сразу переводить пользователя в text-only boundary: кратко объясни, что repair/debug/log inspection продолжаются только в web UI/операторской сессии.
-- В этом же классе запросов разрешено упомянуть, что простые правки навыка возможны только по явной CRUD-команде через `create_skill`, `update_skill` или `delete_skill`.
+- В этом же классе запросов разрешено упомянуть, что простые правки навыка возможны только по явной CRUD-команде через `create_skill`, `update_skill`, `patch_skill`, `delete_skill` или `write_skill_files`.
 - Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков, если runtime snapshot их подтверждает.
 - Для такого skill visibility ответа не ограничивайся только количеством навыков и не задавай встречный вопрос до явного перечисления имён.
 - Если пользователь в Telegram/DM пишет короткую команду вида `создай навык <name>` или `create <name> skill` и уже дал конкретное имя/slug, считай это достаточным разрешением для первой попытки `create_skill`.
 - Для такого sparse create запроса не ищи темплейты, не проверяй директории skills, не смотри existing skills и не задавай предварительные вопросы про описание/тело до первой попытки `create_skill`.
-- Для sparse create сам сгенерируй валидный минимальный scaffold: frontmatter `name` + `description`, затем `# <name>`, `## Активация`, `## Workflow`, `## Templates`.
-- После успешного sparse create отвечай коротко, что создан базовый шаблон навыка и его можно доработать следующим сообщением.
+- После успешного create/update/patch/delete отвечай кратко по результату и не показывай внутренние tool-логи.
 - Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold из локальных project docs, а не ищи его через filesystem, mounted workspace или web-search.
 - Для запросов про новые версии Codex CLI в user-facing remote surface действуй в advisory-only режиме: проверь доступную информацию, кратко объясни статус и дай рекомендации, но не обещай удалённо обновить локальную установку Codex пользователя.
 - На remote user-facing surface не запускай молча `make codex-update`, `moltis-codex-update-run.sh` и другие operator-only runtime path; они допустимы только для trusted operator/local контекста с реально доступными `/server` и writable runtime state.
@@ -189,7 +188,7 @@ soul = """
 - Если для `/status` какое-то поле не проверялось без инструментов, так и пиши человеческим языком, но не компенсируй это запуском инструментов по умолчанию.
 - Для exact skill visibility запроса (`skills`, `навыки`, `что у тебя с навыками`) сначала перечисли имена навыков в первой строке, а уже потом при необходимости добавь одно короткое уточнение.
 - Для exact template/шаблон запроса про навык сразу покажи минимальный scaffold `SKILL.md` в markdown и не пиши, что будешь искать template, проверять directory skills или читать existing skills.
-- Для sparse create запроса вида `создай навык <slug>` сначала сделай одну прямую попытку `create_skill` с минимальным scaffold и только после результата ответь пользователю; не запускай перед этим `exec`, `find`, `ls`, `cat`, browser, web-search или дополнительные exploratory tool calls.
+- Для sparse create запроса вида `создай навык <slug>` сначала сделай одну прямую попытку `create_skill`, а затем дорабатывай skill нативно через `update_skill`, `patch_skill` и `write_skill_files`; не запускай перед этим `exec`, `find`, `ls`, `cat`, browser, web-search или дополнительные exploratory tool calls.
 """                                # Freeform personality text injected into system prompt
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -484,7 +483,7 @@ enabled = true                    # Keep Telegram integration explicitly enabled
 token = "${TELEGRAM_BOT_TOKEN}"
 dm_policy = "allowlist"
 allowlist = ["262872984"]  # Telegram user IDs as strings
-model = "openai-codex::gpt-5.4"  # Telegram-safe lane currently relies on prompt discipline because live Telegram hook dispatch in Moltis 0.10.18 is not reliable enough on its own.
+model = "openai-codex::gpt-5.4"  # Telegram-safe lane stays pinned to the primary owner DM model while hooks contain leakage and tool-safety drift.
 model_provider = "openai-codex"
 stream_mode = "off"        # Official changelog adds Telegram reply streaming; pin classic final-message delivery so user chats never receive partial/tool-progress output
 # Controlled webhook rollout (keep disabled until endpoint contract is verified).
@@ -535,6 +534,7 @@ container_host = "host.docker.internal"  # Moltis runs in Docker; sibling browse
 enabled = true  # Enable skills system
 search_paths = []  # Production must not rely on repo-mounted /server/skills for discovery
 auto_load = []  # User-facing Telegram safe lane must not preload long-research or operator-oriented skills into every DM turn
+enable_agent_sidecar_files = true  # Allow native write_skill_files flow so owner DM can refine personal skills without repo-side scaffold hacks
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MCP SERVERS
@@ -791,8 +791,8 @@ rate_limit_window_secs = 60
 # Keep the matching repo-managed hook bundle under
 # `/.moltis/hooks/telegram-safe-llm-guard/HOOK.md`.
 # Deploy sync materializes that bundle into the runtime-discovered project hook
-# path under `<data_dir>/.moltis/hooks/`, because Moltis 0.10.18 does not
-# reliably register this tracked config-defined hook in live Telegram runtime.
+# path under `<data_dir>/.moltis/hooks/`, because live Telegram runtime can
+# still drift from the tracked hook contract and must remain leak-safe.
 [[hooks.hooks]]
 name = "telegram-safe-llm-guard"
 command = "./scripts/telegram-safe-llm-guard.sh"
