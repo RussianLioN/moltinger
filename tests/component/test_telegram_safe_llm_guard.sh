@@ -295,8 +295,11 @@ EOF
     fastpath_status_status=$?
     set -e
     if [[ "$fastpath_status_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_status_stdout" ]] && \
        [[ ! -s "$fastpath_status_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_status_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_status_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_status_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_status_stdout" && \
        [[ -f "$fastpath_status_suppress_file" ]] && \
        grep -Fq $'\tstatus' "$fastpath_status_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_status_log" && \
@@ -605,8 +608,11 @@ EOF
     mixed_status_codex_status=$?
     set -e
     if [[ "$mixed_status_codex_status" -eq 0 ]] && \
-       [[ ! -s "$mixed_status_codex_stdout" ]] && \
        [[ ! -s "$mixed_status_codex_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
        [[ -f "$mixed_status_codex_session_suppress" ]] && \
        [[ -f "$mixed_status_codex_chat_suppress" ]] && \
        grep -Fq $'\tstatus' "$mixed_status_codex_session_suppress" && \
@@ -1013,8 +1019,11 @@ EOF
     fastpath_visibility_status=$?
     set -e
     if [[ "$fastpath_visibility_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_visibility_stdout" ]] && \
        [[ ! -s "$fastpath_visibility_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
        [[ -f "$fastpath_visibility_suppress_file" ]] && \
        grep -Fq $'\tskill_visibility' "$fastpath_visibility_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_visibility_log" && \
@@ -1053,8 +1062,11 @@ EOF
     fastpath_template_status=$?
     set -e
     if [[ "$fastpath_template_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_template_stdout" ]] && \
        [[ ! -s "$fastpath_template_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_template_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_template_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_template_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_template_stdout" && \
        [[ -f "$fastpath_template_suppress_file" ]] && \
        grep -Fq $'\tskill_template' "$fastpath_template_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_template_log" && \
@@ -1120,8 +1132,11 @@ EOF
     fastpath_skill_detail_status=$?
     set -e
     if [[ "$fastpath_skill_detail_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_skill_detail_stdout" ]] && \
        [[ ! -s "$fastpath_skill_detail_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
        [[ -f "$fastpath_skill_detail_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
@@ -1192,13 +1207,16 @@ EOF
     fastpath_skill_detail_live_status=$?
     set -e
     if [[ "$fastpath_skill_detail_live_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_skill_detail_live_stdout" ]] && \
        [[ ! -s "$fastpath_skill_detail_live_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
        [[ -f "$fastpath_skill_detail_live_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:codex-update' "$fastpath_skill_detail_live_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_live_log" && \
        grep -Fq 'codex-update' "$fastpath_skill_detail_live_log" && \
-       grep -Fq 'новая стабильная версия Codex CLI' "$fastpath_skill_detail_live_log" && \
+       grep -Fq 'не вижу явного упоминания `last_announced_version`' "$fastpath_skill_detail_live_log" && \
        ! grep -Eq "read_skill|missing 'name'|Activity log|/home/moltis" "$fastpath_skill_detail_live_log"; then
         test_pass
     else
@@ -1315,8 +1333,11 @@ EOF
     fastpath_skill_detail_history_status=$?
     set -e
     if [[ "$fastpath_skill_detail_history_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_skill_detail_history_stdout" ]] && \
        [[ ! -s "$fastpath_skill_detail_history_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
        [[ -f "$fastpath_skill_detail_history_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_history_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_history_log" && \
@@ -1390,8 +1411,11 @@ EOF
     fastpath_skill_detail_nolang_status=$?
     set -e
     if [[ "$fastpath_skill_detail_nolang_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_skill_detail_nolang_stdout" ]] && \
        [[ ! -s "$fastpath_skill_detail_nolang_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
        [[ -f "$fastpath_skill_detail_nolang_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_nolang_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
@@ -3514,8 +3538,11 @@ EOF
     fastpath_maintenance_status=$?
     set -e
     if [[ "$fastpath_maintenance_status" -eq 0 ]] && \
-       [[ ! -s "$fastpath_maintenance_stdout" ]] && \
        [[ ! -s "$fastpath_maintenance_stderr" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
+       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
        [[ -f "$fastpath_maintenance_suppress_file" ]] && \
        grep -Fq $'\tmaintenance:codex_update' "$fastpath_maintenance_suppress_file" && \
        grep -Fq 'chat_id=262872999' "$fastpath_maintenance_log" && \
