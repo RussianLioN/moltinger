@@ -2393,6 +2393,24 @@ determine_codex_update_reply_mode() {
     printf '%s' 'release'
 }
 
+determine_effective_codex_update_reply_mode() {
+    local current_context_request="${1:-false}"
+    local current_scheduler_request="${2:-false}"
+    local persisted_context_request="${3:-false}"
+    local persisted_scheduler_request="${4:-false}"
+
+    if [[ "$current_scheduler_request" == true ]]; then
+        printf '%s' 'scheduler'
+        return 0
+    fi
+    if [[ "$current_context_request" == true ]]; then
+        printf '%s' 'context'
+        return 0
+    fi
+
+    determine_codex_update_reply_mode "$persisted_context_request" "$persisted_scheduler_request"
+}
+
 codex_update_intent_name_for_mode() {
     case "${1:-release}" in
         scheduler)
@@ -4354,7 +4372,7 @@ fi
 if [[ "$requested_skill_reference_name" == "codex-update" || "$resolved_skill_name" == "codex-update" || "$persisted_skill_detail_name" == "codex-update" || "$persisted_skill_maintenance_name" == "codex-update" ]]; then
     codex_update_subject_request=true
 fi
-if [[ "$codex_update_subject_request" == true ]] && text_looks_like_codex_update_context_request "$intent_text_flat"; then
+if [[ "$codex_update_subject_request" == true && "$current_turn_codex_update_scheduler_request" != true ]] && text_looks_like_codex_update_context_request "$intent_text_flat"; then
     current_turn_codex_update_context_request=true
     current_turn_codex_update_request=true
     current_turn_codex_update_scheduler_request=false
@@ -4867,7 +4885,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     fi
 
     if [[ "$current_turn_codex_update_request" == true || "$persisted_codex_update_request" == true ]]; then
-        codex_update_terminal_token="$(determine_codex_update_reply_mode "$([[ "$current_turn_codex_update_context_request" == true || "$persisted_codex_update_context_request" == true ]] && printf true || printf false)" "$([[ "$current_turn_codex_update_scheduler_request" == true || "$persisted_codex_update_scheduler_request" == true ]] && printf true || printf false)")"
+        codex_update_terminal_token="$(determine_effective_codex_update_reply_mode "$current_turn_codex_update_context_request" "$current_turn_codex_update_scheduler_request" "$persisted_codex_update_context_request" "$persisted_codex_update_scheduler_request")"
         if ! persist_terminal_marker "${turn_session_key:-}" "$codex_update_terminal_token"; then
             write_audit_line "codex_update_terminal_marker_fallback token=$codex_update_terminal_token"
         fi
@@ -4956,7 +4974,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
         fi
     fi
     if [[ "$current_turn_codex_update_request" == true || "$persisted_codex_update_request" == true ]]; then
-        codex_update_reply_mode="$(determine_codex_update_reply_mode "$([[ "$current_turn_codex_update_context_request" == true || "$persisted_codex_update_context_request" == true ]] && printf true || printf false)" "$([[ "$current_turn_codex_update_scheduler_request" == true || "$persisted_codex_update_scheduler_request" == true ]] && printf true || printf false)")"
+        codex_update_reply_mode="$(determine_effective_codex_update_reply_mode "$current_turn_codex_update_context_request" "$current_turn_codex_update_scheduler_request" "$persisted_codex_update_context_request" "$persisted_codex_update_scheduler_request")"
         codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
         if [[ -n "$codex_update_reply_text" ]]; then
             write_audit_line "emit_modify event=$event reason=codex_update_reply_override mode=$codex_update_reply_mode"

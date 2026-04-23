@@ -2281,6 +2281,19 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must allow the remote-safe codex-update scheduler contract reply"
     fi
 
+    test_start "component_telegram_remote_uat_allows_exact_schedule_phrase_for_codex_update_scheduler_contract"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_contract_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "По какому расписанию сейчас работает навык codex-update?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-safe-exact-phrase.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must classify the exact schedule phrasing as the codex-update scheduler contract"
+    fi
+
     test_start "component_telegram_remote_uat_fails_codex_update_scheduler_question_when_reply_falls_into_skill_detail_summary"
     if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_skill_detail_false_positive_pass \
         "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
@@ -2296,6 +2309,24 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must classify codex-update scheduler questions that degrade into skill-detail wording as a scheduler contract mismatch"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_exact_schedule_phrase_when_reply_drifts_into_codex_update_context_contract"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_context_contract_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "По какому расписанию сейчас работает навык codex-update?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-context-drift.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the exact schedule phrasing drifts into the codex-update context reply"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-context-drift.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify the exact schedule phrasing that drifts into context wording as a scheduler contract mismatch"
         fi
     fi
 

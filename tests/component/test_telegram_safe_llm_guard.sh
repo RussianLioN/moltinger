@@ -769,6 +769,69 @@ EOF
         test_fail "A scheduler question that explicitly names codex-update as a skill must still stay on the codex-update scheduler contract instead of drifting into implicit skill-detail routing"
     fi
 
+    test_start "component_codex_update_direct_fastpath_routes_explicit_schedule_phrase_to_scheduler_contract"
+    local codex_schedule_phrase_tmp codex_schedule_phrase_send_script codex_schedule_phrase_log codex_schedule_phrase_stdout codex_schedule_phrase_stderr
+    local codex_schedule_phrase_status codex_schedule_phrase_intent_dir codex_schedule_phrase_session_suppress codex_schedule_phrase_chat_suppress
+    codex_schedule_phrase_tmp="$(secure_temp_dir telegram-safe-codex-schedule-phrase)"
+    codex_schedule_phrase_send_script="$codex_schedule_phrase_tmp/send.sh"
+    codex_schedule_phrase_log="$codex_schedule_phrase_tmp/send.log"
+    codex_schedule_phrase_intent_dir="$codex_schedule_phrase_tmp/intent"
+    codex_schedule_phrase_session_suppress="$codex_schedule_phrase_intent_dir/session_codexschedulephrase.suppress"
+    codex_schedule_phrase_chat_suppress="$codex_schedule_phrase_intent_dir/chat-262872985.suppress"
+    cat >"$codex_schedule_phrase_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$codex_schedule_phrase_send_script"
+    codex_schedule_phrase_stdout="$codex_schedule_phrase_tmp/stdout.log"
+    codex_schedule_phrase_stderr="$codex_schedule_phrase_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$codex_schedule_phrase_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_schedule_phrase_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$codex_schedule_phrase_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$codex_schedule_phrase_stdout" 2>"$codex_schedule_phrase_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codexschedulephrase","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872985 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"По какому расписанию сейчас работает навык codex-update?"}],"tool_count":37,"iteration":1}}
+EOF
+    codex_schedule_phrase_status=$?
+    set -e
+    if [[ "$codex_schedule_phrase_status" -eq 0 ]] && \
+       [[ ! -s "$codex_schedule_phrase_stderr" ]] && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$codex_schedule_phrase_stdout" && \
+       [[ -f "$codex_schedule_phrase_session_suppress" ]] && \
+       [[ -f "$codex_schedule_phrase_chat_suppress" ]] && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_schedule_phrase_session_suppress" && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_schedule_phrase_chat_suppress" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$codex_schedule_phrase_log" && \
+       grep -Fq 'операторский/runtime check' "$codex_schedule_phrase_log" && \
+       ! grep -Fq 'После исправлений схема такая' "$codex_schedule_phrase_log"; then
+        test_pass
+    else
+        test_fail "An explicit schedule phrasing for codex-update must stay on the scheduler contract instead of drifting into the context reply"
+    fi
+
     test_start "component_codex_update_direct_fastpath_handles_array_message_content_from_live_payload"
     local array_codex_tmp array_codex_send_script array_codex_log array_codex_stdout array_codex_stderr
     local array_codex_status array_codex_intent_dir array_codex_session_suppress_file array_codex_chat_suppress_file
@@ -4131,6 +4194,28 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must replace codex-update scheduler memory leaks with the deterministic remote-safe contract reply"
+    fi
+
+    test_start "component_message_sending_current_scheduler_turn_overrides_stale_persisted_codex_update_context_intent"
+    local codex_update_stale_context_dir codex_update_stale_context_output codex_update_stale_context_intent_file
+    codex_update_stale_context_dir="$(secure_temp_dir telegram-safe-codex-update-stale-context)"
+    codex_update_stale_context_intent_file="$codex_update_stale_context_dir/session_codexscheduleoverride.intent"
+    printf '%s\t%s\t%s\n' "$(date +%s)" "codex_update_context" "" >"$codex_update_stale_context_intent_file"
+    codex_update_stale_context_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_update_stale_context_dir" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:codexscheduleoverride","data":{"account_id":"moltis-bot","to":"262872995","reply_to_message_id":966,"user_message":"По какому расписанию сейчас работает навык codex-update?","text":"Раньше повторные сообщения про Codex CLI появлялись из-за дефекта старого контура дедупликации. После исправлений схема такая: scheduler path проверяет официальный upstream Codex CLI каждые 6 часов."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
+       jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
+       jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
+       jq -e '.data.reply_to_message_id == 966' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
+       jq -e '.data.text | test("После исправлений схема такая|last_alert_fingerprint|suppressed") | not' >/dev/null 2>&1 <<<"$codex_update_stale_context_output"; then
+        test_pass
+    else
+        test_fail "A current codex-update scheduler turn must override stale persisted context intent during final MessageSending rewriting"
     fi
 
     test_start "component_message_sending_guard_rewrites_post_close_classifier_skill_detail_into_clean_runtime_summary"
