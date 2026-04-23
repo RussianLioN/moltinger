@@ -1784,6 +1784,20 @@ direct_fastpath_send_with_suppression() {
     return 1
 }
 
+emit_same_turn_fastpath_terminalization() {
+    local token="${1:-}"
+    local reason="${2:-direct_fastpath_terminalized}"
+    local same_turn_guard=""
+    local same_turn_user=""
+    local messages_json=""
+
+    same_turn_guard="$(build_same_turn_fastpath_guard_message)"
+    same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
+    messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
+    write_audit_line "before_modify reason=$reason token=${token:-none} iteration=${current_iteration:-missing}"
+    emit_before_llm_modified_payload "$messages_json" 0
+}
+
 persist_turn_intent() {
     local raw_key="${1:-}"
     local intent_name="${2:-}"
@@ -2720,6 +2734,7 @@ build_skill_detail_reply_text() {
     local requested_name="${1:-}"
     local resolved_name="${2:-}"
     local csv="${3:-}"
+    local query_text="${4:-}"
     local skill_file=""
     local description_line=""
     local telegram_summary=""
@@ -2728,11 +2743,20 @@ build_skill_detail_reply_text() {
     local telegram_safe_note=""
     local first_source_line=""
     local generated_reply=""
+    local detail_query_flat=""
+    local skill_text_flat=""
     local -a parts=()
 
     if [[ -n "$resolved_name" ]]; then
         skill_file="$(runtime_skill_file_path "$resolved_name" || true)"
     fi
+
+    detail_query_flat="$(
+        printf '%s' "$query_text" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+    )"
 
     if false && command -v perl >/dev/null 2>&1; then
         generated_reply="$(
@@ -2909,7 +2933,7 @@ PL
 
     if command -v python3 >/dev/null 2>&1; then
         generated_reply="$(
-            python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" <<'PY'
+            python3 - "$requested_name" "$resolved_name" "$csv" "$skill_file" "$detail_query_flat" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -2918,6 +2942,7 @@ requested = (sys.argv[1] if len(sys.argv) > 1 else "").strip()
 resolved = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
 csv = (sys.argv[3] if len(sys.argv) > 3 else "").strip()
 skill_file = Path(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
+query_text = (sys.argv[5] if len(sys.argv) > 5 else "").strip().lower()
 skills = [item.strip() for item in csv.split(",") if item.strip()]
 
 def clean(text: str) -> str:
@@ -2964,6 +2989,7 @@ def first_source_from_section(text: str, heading: str) -> str:
 
 if resolved and skill_file and skill_file.is_file():
     raw_text = skill_file.read_text(encoding="utf-8")
+    normalized_text = clean(raw_text).lower()
     frontmatter = parse_frontmatter(raw_text)
     description = clean(frontmatter.get("description", ""))
     telegram_summary = clean(frontmatter.get("telegram_summary", ""))
@@ -2972,6 +2998,24 @@ if resolved and skill_file and skill_file.is_file():
     telegram_safe_note = clean(frontmatter.get("telegram_safe_note", ""))
     has_safe_dm_guard = "В Telegram-safe режиме я не провожу длительное исследование" in raw_text
     first_source = first_source_from_section(raw_text, "Источники по приоритету")
+
+    if "last_announced_version" in query_text or "last announced version" in query_text:
+        if "last_announced_version" in normalized_text:
+            print(f"{resolved}: в текущем SKILL.md есть явное упоминание `last_announced_version`.")
+        else:
+            print(f"{resolved}: в текущем SKILL.md не вижу явного упоминания `last_announced_version`, значит такая дедупликация там сейчас не описана.")
+        raise SystemExit(0)
+
+    if re.search(r"(дедуп|dedup|duplicate|дублик)", query_text):
+        markers = []
+        for marker in ("last_announced_version", "last_announced_at", "dedup", "duplicate"):
+            if marker in normalized_text:
+                markers.append(marker)
+        if markers:
+            print(f"{resolved}: в текущем SKILL.md вижу явные маркеры дедупликации ({', '.join(markers)}).")
+        else:
+            print(f"{resolved}: в текущем SKILL.md не вижу явного описания дедупликации или полей вроде `last_announced_version` / `last_announced_at`.")
+        raise SystemExit(0)
 
     parts = []
     summary_description = (telegram_summary or description or "в описании навыка пока нет короткого summary").rstrip(" .!?")
@@ -3009,6 +3053,27 @@ PY
     fi
 
     if [[ -n "$resolved_name" && -n "$skill_file" && -f "$skill_file" ]]; then
+        skill_text_flat="$(
+            tr '\r\n' '  ' <"$skill_file" 2>/dev/null \
+                | tr '[:upper:]' '[:lower:]' \
+                | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+        )" || true
+        if printf '%s' "$detail_query_flat" | grep -Eq 'last_announced_version|last announced version'; then
+            if printf '%s' "$skill_text_flat" | grep -Fq 'last_announced_version'; then
+                printf '%s' "$resolved_name: в текущем SKILL.md есть явное упоминание \`last_announced_version\`."
+            else
+                printf '%s' "$resolved_name: в текущем SKILL.md не вижу явного упоминания \`last_announced_version\`, значит такая дедупликация там сейчас не описана."
+            fi
+            return 0
+        fi
+        if printf '%s' "$detail_query_flat" | grep -Eiq 'дедуп|dedup|duplicate|дублик'; then
+            if printf '%s' "$skill_text_flat" | grep -Eiq 'last_announced_version|last_announced_at|dedup|duplicate'; then
+                printf '%s' "$resolved_name: в текущем SKILL.md вижу явные маркеры дедупликации."
+            else
+                printf '%s' "$resolved_name: в текущем SKILL.md не вижу явного описания дедупликации или полей вроде \`last_announced_version\` / \`last_announced_at\`."
+            fi
+            return 0
+        fi
         description_line="$(
             awk -v key="description" '
                 BEGIN { in_frontmatter = 0; capture = 0 }
@@ -4303,6 +4368,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         if [[ "$current_turn_status_request" == true ]]; then
             if direct_fastpath_send_with_suppression "status" "$telegram_chat_id" "$canonical_status" "status"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "status" "status_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4310,6 +4376,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             maintenance_reply_text="$(build_skill_maintenance_reply_text "codex_update" || true)"
             if [[ -n "$maintenance_reply_text" ]] && direct_fastpath_send_with_suppression "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:codex_update"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "maintenance:codex_update" "maintenance_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4317,6 +4384,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             maintenance_reply_text="$(build_skill_maintenance_reply_text "generic" || true)"
             if [[ -n "$maintenance_reply_text" ]] && direct_fastpath_send_with_suppression "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:generic"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "maintenance:generic" "maintenance_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4324,6 +4392,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             maintenance_reply_text="$(build_skill_maintenance_reply_text "skill" "${resolved_skill_name:-${requested_skill_reference_name:-generic}}" || true)"
             if [[ -n "$maintenance_reply_text" ]] && direct_fastpath_send_with_suppression "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}" "skill=${resolved_skill_name:-${requested_skill_reference_name:-generic}}"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}" "maintenance_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4351,6 +4420,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
             if direct_fastpath_send_with_suppression "skill_visibility" "$telegram_chat_id" "$visibility_reply_text" "skill_visibility" "snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "skill_visibility" "skill_visibility_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4358,14 +4428,16 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             template_reply_text="$(build_skill_template_reply_text)"
             if direct_fastpath_send_with_suppression "skill_template" "$telegram_chat_id" "$template_reply_text" "skill_template"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "skill_template" "skill_template_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
         if [[ "$current_turn_skill_detail_request" == true ]]; then
-            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" "${latest_user_message_flat:-${intent_text_flat:-}}" || true)"
             write_audit_line "skill_detail_probe stage=direct requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} chat_id=${telegram_chat_id:-missing} reply_len=${#skill_detail_reply_text} send_script_exec=$([[ -x "$DIRECT_SEND_SCRIPT" ]] && printf true || printf false)"
             if [[ -n "$skill_detail_reply_text" ]] && direct_fastpath_send_with_suppression "skill_detail" "$telegram_chat_id" "$skill_detail_reply_text" "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}" "skill=${resolved_skill_name:-missing}"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "skill_detail:${resolved_skill_name:-${requested_skill_reference_name:-generic}}" "skill_detail_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4373,6 +4445,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
             if [[ -n "$apply_reply_text" ]] && direct_fastpath_send_with_suppression "skill_apply" "$telegram_chat_id" "$apply_reply_text" "skill_apply:${requested_skill_name:-generic}" "skill=${requested_skill_name:-missing}"; then
                 clear_turn_intent "${turn_session_key:-}"
+                emit_same_turn_fastpath_terminalization "skill_apply:${requested_skill_name:-generic}" "skill_apply_direct_fastpath_terminalized"
                 exit 0
             fi
         fi
@@ -4426,7 +4499,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             exit 0
         fi
         if [[ "$current_turn_skill_detail_request" == true ]]; then
-            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" "${latest_user_message_flat:-${intent_text_flat:-}}" || true)"
             write_audit_line "skill_detail_probe stage=before_modify requested=${requested_skill_reference_name:-missing} resolved=${resolved_skill_name:-missing} reply_len=${#skill_detail_reply_text}"
             if [[ -n "$skill_detail_reply_text" ]]; then
                 skill_detail_guard="$(build_skill_detail_hard_override_message "$skill_detail_reply_text")"
@@ -4522,7 +4595,7 @@ if [[ "$event" == "BeforeToolCall" && "$is_telegram_safe_lane" == true ]]; then
     fi
 
     if [[ "$current_turn_skill_detail_request" == true || -n "$persisted_skill_detail_name" ]]; then
-        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" "${latest_user_message_flat:-${intent_text_flat:-}}" || true)"
         if [[ -z "$skill_detail_reply_text" ]]; then
             skill_detail_reply_text='В Telegram-safe режиме skill detail отвечается детерминированно и без инструментов.'
         fi
@@ -4695,7 +4768,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
         exit 0
     fi
     if [[ "$current_turn_skill_detail_request" == true || -n "$persisted_skill_detail_name" ]]; then
-        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" || true)"
+        skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" "${latest_user_message_flat:-${intent_text_flat:-}}" || true)"
         if [[ -n "$skill_detail_reply_text" ]]; then
             write_audit_line "emit_modify event=$event reason=skill_detail_reply_override skill=${resolved_skill_name:-${requested_skill_reference_name:-missing}}"
             if [[ "$event" == "AfterLLMCall" ]]; then
