@@ -3736,7 +3736,13 @@ case "${persisted_turn_intent:-}" in
         ;;
 esac
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
+if [[ -z "$channel_account" ]]; then
+    channel_account="$(extract_runtime_field_from_text "${messages_json:-$payload_flat}" "channel_account" || true)"
+fi
 system_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
+if [[ -z "$system_chat_id" ]]; then
+    system_chat_id="$(extract_runtime_field_from_text "${messages_json:-$payload_flat}" "channel_chat_id" || true)"
+fi
 delivery_chat_id="$(extract_first_string to || true)"
 if [[ -z "$delivery_chat_id" ]]; then
     delivery_chat_id="$(extract_first_number to || true)"
@@ -4110,6 +4116,10 @@ if [[ "$current_turn_skill_detail_request" != true && "$looks_like_skill_turn" !
         current_turn_skill_detail_request=true
         looks_like_skill_turn=true
     fi
+fi
+if [[ "$current_turn_skill_detail_request" == true ]]; then
+    current_turn_codex_update_request=false
+    current_turn_codex_update_scheduler_request=false
 fi
 if [[ "$has_current_user_turn" != true && -n "$persisted_skill_create_state" && -n "$requested_skill_name" && -n "$requested_skill_name_re" ]] && \
    printf '%s' "${intent_text_flat} ${latest_user_message_flat} ${latest_assistant_message_flat} ${response_text_flat} ${payload_flat}" \

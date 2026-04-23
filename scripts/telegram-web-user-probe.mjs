@@ -54,7 +54,7 @@ const headed = hasFlag("--headed");
 const debug = hasFlag("--debug");
 
 const ERROR_RE =
-  /(traceback|exception|stack\s*trace|panic|internal server error|mcp tool error|validation errors for call\[|missing required argument|unexpected keyword argument|fetching (?:github\.com|https?:\/\/)|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|no models available|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|missing\s+'?(?:action|query|command)'?\s+parameter)/i;
+  /(traceback|exception|stack\s*trace|panic|internal server error|mcp tool error|validation errors for call\[|missing required argument|unexpected keyword argument|fetching (?:github\.com|https?:\/\/)|timed?\s*out|timeout|model[^\n]{0,120}not found|no authenticated providers|no models available|provider[^\n]{0,40}(unauth|unauthorized|auth(?:entication)?\s+failed)|missing\s+'?(?:action|query|command|name|pattern)'?(?:\s+parameter)?)/i;
 const SENSITIVE_RE = /\b(api[_ -]?key|token|password|secret)\b/i;
 
 let stage = "login";
