@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 88
+**Total Lessons**: 89
 
 ---
 
@@ -60,7 +60,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (27 lessons)
+#### P2 (28 lessons)
+- [Telegram skill CRUD routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
 - [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
@@ -204,7 +205,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (6 lessons)
+#### shell (7 lessons)
+- [Telegram skill CRUD routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
@@ -220,14 +222,14 @@
 
 ### Popular Tags
 
-- `rca` (34 lessons)
+- `rca` (35 lessons)
 - `moltis` (28 lessons)
-- `telegram` (24 lessons)
+- `telegram` (25 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `skills` (13 lessons)
+- `skills` (14 lessons)
 - `beads` (12 lessons)
 - `hooks` (11 lessons)
 
@@ -238,10 +240,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 88 |
+| Total Lessons | 89 |
 | Critical (P0/P1) | 45 |
 | Categories | 8 |
-| Unique Tags | 171 |
+| Unique Tags | 173 |
 
 ---
 

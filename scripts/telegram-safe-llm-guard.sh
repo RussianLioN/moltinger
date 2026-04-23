@@ -1035,6 +1035,177 @@ flatten_text_for_match() {
         | sed 's/[[:space:]][[:space:]]*/ /g'
 }
 
+text_matches_extended_regex() {
+    local text="${1:-}"
+    local pattern="${2:-}"
+    local perl_status=0
+
+    [[ -n "$text" && -n "$pattern" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        TEXT_MATCH_TEXT="$text" TEXT_MATCH_PATTERN="$pattern" \
+            perl -CSDA -MEncode=decode,FB_CROAK -e '
+                use strict;
+                use warnings;
+                use utf8;
+
+                my $raw_text = $ENV{TEXT_MATCH_TEXT} // q();
+                my $raw_pattern = $ENV{TEXT_MATCH_PATTERN} // q();
+                exit 2 unless length $raw_pattern;
+
+                my ($text, $pattern) = eval {
+                    (
+                        decode("UTF-8", $raw_text, FB_CROAK),
+                        decode("UTF-8", $raw_pattern, FB_CROAK),
+                    );
+                };
+                exit 2 if $@;
+
+                my $matched = eval {
+                    my $re = qr{$pattern}iu;
+                    $text =~ $re ? 1 : 0;
+                };
+                exit 2 if $@;
+                exit($matched ? 0 : 1);
+            '
+        perl_status=$?
+        case "$perl_status" in
+            0|1)
+                return "$perl_status"
+                ;;
+        esac
+    fi
+
+    printf '%s' "$text" | grep -Eiq "$pattern"
+}
+
+message_has_english_action_token() {
+    local normalized tokens action
+    normalized="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    action="${2:-}"
+    [[ -n "$normalized" && -n "$action" ]] || return 1
+
+    tokens="$(
+        printf '%s' "$normalized" \
+            | sed 's/[^[:alnum:]_.-]/ /g' \
+            | sed 's/[[:space:]]\+/ /g' \
+            | sed 's/^ //; s/ $//'
+    )"
+
+    case " ${tokens} " in
+        *" ${action} "*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+message_is_skill_create_query() {
+    local normalized
+    normalized="$(flatten_text_for_match "${1:-}")"
+    [[ -n "$normalized" ]] || return 1
+
+    if text_matches_extended_regex "$normalized" '(([Сс]оздай|[Сс]оздайте|[Сс]оздадим|[Сс]оздать|[Cc]reate|[Bb]uild|[Mm]ake).{0,40}(навык|skill))|((навык|skill).{0,24}([Сс]оздай|[Сс]оздать|[Сс]оздадим|[Cc]reate|[Bb]uild|[Mm]ake))'; then
+        return 0
+    fi
+
+    return 1
+}
+
+message_is_skill_update_query() {
+    local normalized
+    normalized="$(flatten_text_for_match "${1:-}")"
+    [[ -n "$normalized" ]] || return 1
+
+    if message_is_skill_create_query "$normalized"; then
+        return 1
+    fi
+
+    if text_matches_extended_regex "$normalized" '((([Оо]бнови([[:space:]]|$)|[Оо]бновить[[:space:]]|[Оо]бновите[[:space:]]|[Оо]бновим[[:space:]]|[Оо]бновляй[[:space:]]|[Ии]змени([[:space:]]|$)|[Ии]зменить[[:space:]]|[Ии]змените[[:space:]]|[Ии]зменим[[:space:]]|[Рр]едактируй[[:space:]]|[Рр]едактировать[[:space:]]|[Рр]едактируйте[[:space:]]|[Пп]ерепиши([[:space:]]|$)|[Пп]ереписать[[:space:]]|[Пп]ерепишите[[:space:]]|[Пп]атч[[:space:]]|[Пп]атчить[[:space:]]).{0,40}(навык|skill)))|(((навык|skill).{0,24}([Оо]бнови([[:space:]]|$)|[Оо]бновить[[:space:]]|[Оо]бновите[[:space:]]|[Оо]бновим[[:space:]]|[Оо]бновляй[[:space:]]|[Ии]змени([[:space:]]|$)|[Ии]зменить[[:space:]]|[Ии]змените[[:space:]]|[Ии]зменим[[:space:]]|[Рр]едактируй[[:space:]]|[Рр]едактировать[[:space:]]|[Рр]едактируйте[[:space:]]|[Пп]ерепиши([[:space:]]|$)|[Пп]ереписать[[:space:]]|[Пп]ерепишите[[:space:]]|[Пп]атч[[:space:]]|[Пп]атчить[[:space:]])))'; then
+        return 0
+    fi
+
+    if text_matches_extended_regex "$normalized" '(навык|skill)' && \
+       { message_has_english_action_token "$normalized" "patch" || \
+         message_has_english_action_token "$normalized" "update" || \
+         message_has_english_action_token "$normalized" "edit" || \
+         message_has_english_action_token "$normalized" "rewrite"; }; then
+        return 0
+    fi
+
+    return 1
+}
+
+message_is_skill_delete_query() {
+    local normalized
+    normalized="$(flatten_text_for_match "${1:-}")"
+    [[ -n "$normalized" ]] || return 1
+
+    if message_is_skill_create_query "$normalized"; then
+        return 1
+    fi
+
+    if text_matches_extended_regex "$normalized" '(([Уу]дали|[Уу]далить|[Уу]далите|[Уу]далим|[Уу]даляй|[Уу]далять|[Dd]elete|[Rr]emove).{0,40}(навык|skill))|((навык|skill).{0,24}([Уу]дали|[Уу]далить|[Уу]далите|[Уу]далим|[Уу]даляй|[Уу]далять|[Dd]elete|[Rr]emove))'; then
+        return 0
+    fi
+
+    return 1
+}
+
+message_is_skill_mutation_query() {
+    local normalized
+    normalized="$(flatten_text_for_match "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    [[ -n "$normalized" ]] || return 1
+
+    if message_is_skill_create_query "$normalized" || message_is_skill_update_query "$normalized" || message_is_skill_delete_query "$normalized"; then
+        return 0
+    fi
+
+    return 1
+}
+
+skill_request_mentions_explicit_body_details() {
+    local normalized
+    normalized="$(flatten_text_for_match "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    [[ -n "$normalized" ]] || return 1
+
+    text_matches_extended_regex "$normalized" '(SKILL\.md|frontmatter|markdown|описан|тело|body|workflow|templates?|шаблон|template)'
+}
+
+trim_trailing_skill_token_punctuation() {
+    local token="${1:-}"
+    local trimmed=""
+    local perl_status=0
+
+    [[ -n "$token" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        trimmed="$(
+            SKILL_TOKEN_RAW="$token" \
+                perl -CSDA -e '
+                    use strict;
+                    use warnings;
+                    use utf8;
+
+                    my $value = $ENV{SKILL_TOKEN_RAW} // q();
+                    $value =~ s/\s+$//;
+                    $value =~ s/[.,;:!?)}\]»"'"'"'`]+$//;
+                    print $value;
+                '
+        )"
+        perl_status=$?
+        if [[ "$perl_status" -eq 0 && -n "$trimmed" ]]; then
+            printf '%s' "$trimmed"
+            return 0
+        fi
+    fi
+
+    trimmed="$(printf '%s' "$token" | sed 's/[[:space:]]*$//; s/[.,;:!?)}\]"\x27`»]*$//')"
+    [[ -n "$trimmed" ]] || return 1
+    printf '%s' "$trimmed"
+}
+
 extract_last_message_content_by_role() {
     local messages_json="${1:-}"
     local target_role="${2:-user}"
@@ -2169,7 +2340,7 @@ build_skill_apply_reply_text() {
     local skill_name="${1:-}"
 
     if [[ -n "$skill_name" ]]; then
-        printf 'В Telegram-safe режиме я не запускаю навык `%s` через инструменты. Могу кратко объяснить, что делает этот навык, или продолжить в web UI/операторской сессии.' "$skill_name"
+        printf 'В Telegram-safe режиме я не запускаю навыки через инструменты. Навык `%s` могу кратко объяснить здесь, а запуск/применение продолжить в web UI/операторской сессии.' "$skill_name"
         return 0
     fi
 
@@ -2597,39 +2768,10 @@ extract_runtime_field_from_text() {
         | sed -E "s/^${field_name}=//"
 }
 
-extract_requested_skill_name() {
-    local source_text="${1:-}"
-    local normalized_text=""
-
-    [[ -n "$source_text" ]] || return 1
-
-    normalized_text="$(
-        printf '%s' "$source_text" \
-            | tr '\r\n' '  ' \
-            | sed 's/[[:space:]][[:space:]]*/ /g'
-    )"
-
-    if [[ "$normalized_text" =~ [Сс]озда(й|ть|дим)[[:space:]]+(нов(ый|ую)[[:space:]]+)?(навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
-        printf '%s' "${BASH_REMATCH[5]}"
-        return 0
-    fi
-
-    if [[ "$normalized_text" =~ [Cc]reate[[:space:]]+(new[[:space:]]+)?skill[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
-        printf '%s' "${BASH_REMATCH[2]}"
-        return 0
-    fi
-
-    if [[ "$normalized_text" =~ [Cc]reate[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*)[[:space:]]+skill ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-        return 0
-    fi
-
-    return 1
-}
-
 extract_referenced_skill_candidate() {
     local source_text="${1:-}"
     local normalized_text=""
+    local candidate=""
 
     [[ -n "$source_text" ]] || return 1
 
@@ -2640,16 +2782,48 @@ extract_referenced_skill_candidate() {
     )"
 
     if [[ "$normalized_text" =~ [Пп]ро[[:space:]]+(навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
-        printf '%s' "${BASH_REMATCH[2]}"
-        return 0
+        candidate="${BASH_REMATCH[2]}"
+    elif [[ "$normalized_text" =~ (навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        candidate="${BASH_REMATCH[2]}"
+    else
+        return 1
     fi
 
-    if [[ "$normalized_text" =~ (навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
-        printf '%s' "${BASH_REMATCH[2]}"
-        return 0
+    candidate="$(trim_trailing_skill_token_punctuation "$candidate" || true)"
+    [[ -n "$candidate" ]] || return 1
+    printf '%s' "$candidate"
+    return 0
+}
+
+extract_requested_skill_name() {
+    local source_text="${1:-}"
+    local normalized_text=""
+    local candidate=""
+
+    [[ -n "$source_text" ]] || return 1
+
+    normalized_text="$(
+        printf '%s' "$source_text" \
+            | tr '\r\n' '  ' \
+            | sed 's/[[:space:]][[:space:]]*/ /g'
+    )"
+
+    if [[ "$normalized_text" =~ [Cc]reate[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*)[[:space:]]+skill ]]; then
+        candidate="${BASH_REMATCH[1]}"
+    elif [[ "$normalized_text" =~ ([Пп]ро|[Пп]ровер(ь|ить)|[Оо]бнов(и|ить)|[Уу]дали(ть)?|[Сс]озда(й|ть)?)[^[:alnum:]]+(навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        candidate="${BASH_REMATCH[4]}"
+    elif [[ "$normalized_text" =~ (create|build|make|[Сс]озда[[:alnum:]]*)[^[:alnum:]]+([A-Za-z0-9][A-Za-z0-9._-]*)[^[:alnum:]]+(skill|навык) ]]; then
+        candidate="${BASH_REMATCH[2]}"
+    elif [[ "$normalized_text" =~ (навык|skill)[[:space:]]+([A-Za-z0-9][A-Za-z0-9._-]*) ]]; then
+        candidate="${BASH_REMATCH[2]}"
+    else
+        return 1
     fi
 
-    return 1
+    candidate="$(trim_trailing_skill_token_punctuation "$candidate" || true)"
+    [[ -n "$candidate" ]] || return 1
+    printf '%s' "$candidate"
+    return 0
 }
 
 resolve_runtime_skill_name_from_text() {
@@ -4145,9 +4319,15 @@ current_turn_skill_mutation_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
     current_turn_skill_mutation_request=true
 fi
+if [[ "$current_turn_skill_mutation_request" != true ]] && message_is_skill_mutation_query "$intent_text_flat"; then
+    current_turn_skill_mutation_request=true
+fi
 
 looks_like_skill_turn=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
+    looks_like_skill_turn=true
+fi
+if [[ "$looks_like_skill_turn" != true && "$current_turn_skill_mutation_request" == true ]]; then
     looks_like_skill_turn=true
 fi
 
@@ -4188,6 +4368,11 @@ fi
 current_turn_sparse_skill_create_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|сдела(й|ем|ть)|create|build|make).{0,120}(навык|skills?|skill))|((create|build|make)[[:space:]]+[A-Za-z0-9._-]+[[:space:]]+(skill|навык))'; then
     if ! printf '%s' "$intent_text_flat" | grep -Eiq '(SKILL\.md|frontmatter|markdown|описан|тело|body|workflow|templates?|шаблон|template)'; then
+        current_turn_sparse_skill_create_request=true
+    fi
+fi
+if [[ "$current_turn_sparse_skill_create_request" != true ]] && message_is_skill_create_query "$intent_text_flat"; then
+    if ! skill_request_mentions_explicit_body_details "$intent_text_flat"; then
         current_turn_sparse_skill_create_request=true
     fi
 fi
@@ -4412,6 +4597,9 @@ if [[ "$current_turn_skill_detail_request" != true && "$looks_like_skill_turn" !
         current_turn_skill_detail_request=true
         looks_like_skill_turn=true
     fi
+fi
+if [[ "$current_turn_skill_mutation_request" == true || "$current_turn_sparse_skill_create_request" == true ]]; then
+    current_turn_skill_detail_request=false
 fi
 if [[ "$current_turn_skill_detail_request" == true ]]; then
     current_turn_codex_update_request=false

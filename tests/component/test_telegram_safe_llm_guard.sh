@@ -209,6 +209,97 @@ EOF
         test_fail "BeforeLLMCall guard must replace stale maintenance intent with the native skill CRUD lane when the latest user turn is a plain create-skill request"
     fi
 
+    test_start "component_message_received_guard_keeps_exact_russian_create_prompt_out_of_skill_detail_under_posix_locale"
+    local posix_create_dir posix_create_audit posix_create_output posix_create_send_log posix_create_send_script posix_create_runtime_root
+    posix_create_dir="$(secure_temp_dir telegram-safe-posix-create-message)"
+    posix_create_audit="$posix_create_dir/audit.log"
+    posix_create_send_log="$posix_create_dir/send.log"
+    posix_create_send_script="$posix_create_dir/send.sh"
+    posix_create_runtime_root="$posix_create_dir/runtime"
+    mkdir -p "$posix_create_runtime_root/codex-update" "$posix_create_runtime_root/post-close-task-classifier" "$posix_create_runtime_root/openclaw-improvement-learner" "$posix_create_runtime_root/telegram-learner" "$posix_create_runtime_root/telegram-chat-probe"
+    cp "$PROJECT_ROOT/skills/codex-update/SKILL.md" "$posix_create_runtime_root/codex-update/SKILL.md"
+    cp "$PROJECT_ROOT/skills/post-close-task-classifier/SKILL.md" "$posix_create_runtime_root/post-close-task-classifier/SKILL.md"
+    cp "$PROJECT_ROOT/skills/openclaw-improvement-learner/SKILL.md" "$posix_create_runtime_root/openclaw-improvement-learner/SKILL.md"
+    cp "$PROJECT_ROOT/skills/telegram-learner/SKILL.md" "$posix_create_runtime_root/telegram-learner/SKILL.md"
+    cp "$PROJECT_ROOT/skills/telegram-chat-probe/SKILL.md" "$posix_create_runtime_root/telegram-chat-probe/SKILL.md"
+    cat >"$posix_create_send_script" <<'EOF'
+#!/usr/bin/env bash
+printf 'send %s\n' "$*" >>"$FASTPATH_LOG"
+exit 0
+EOF
+    chmod +x "$posix_create_send_script"
+    posix_create_output="$(
+        env PATH="$MINIMAL_PATH" \
+            LANG= \
+            LC_ALL=C \
+            LC_CTYPE=POSIX \
+            FASTPATH_LOG="$posix_create_send_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$posix_create_runtime_root" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$posix_create_send_script" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$posix_create_dir/intent" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE="$posix_create_audit" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:posix-create-message","content":"Создай навык moltis-update-dialog-20260424-live-05 для отслеживания новых версий Moltis.","channel":null,"channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private"}}
+EOF
+    )"
+    if [[ -z "$posix_create_output" ]] && \
+       ! grep -Fq 'message_received_direct_fastpath kind=skill_detail chat_id=262872984 token=skill_detail:moltis-update-dialog-20260424-live-05 skill=moltis-update-dialog-20260424-live-05' "$posix_create_audit" && \
+       [[ ! -s "$posix_create_send_log" ]]; then
+        test_pass
+    else
+        test_fail "MessageReceived guard must not collapse an exact Russian create-skill prompt into the skill-detail direct fastpath under POSIX locale"
+    fi
+
+    test_start "component_before_llm_guard_routes_exact_russian_create_prompt_into_native_crud_under_posix_locale"
+    local before_llm_posix_create_output before_llm_posix_create_root
+    before_llm_posix_create_root="$(secure_temp_dir telegram-safe-posix-before-create)"
+    before_llm_posix_create_output="$(
+        env PATH="$MINIMAL_PATH" \
+            LANG= \
+            LC_ALL=C \
+            LC_CTYPE=POSIX \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$before_llm_posix_create_root" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,openclaw-improvement-learner,telegram-learner,telegram-chat-probe' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","session_key":"session:posix-before-create","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык moltis-update-dialog-20260424-live-05 для отслеживания новых версий Moltis."}],"tool_count":37,"iteration":1}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("Telegram-safe skill-detail hard override") | not' >/dev/null 2>&1 <<<"$before_llm_posix_create_output" && \
+       jq -e '.data.messages[-1].content == "Создай навык moltis-update-dialog-20260424-live-05 для отслеживания новых версий Moltis."' >/dev/null 2>&1 <<<"$before_llm_posix_create_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must route an exact Russian create-skill prompt into native CRUD even when the runtime locale is POSIX"
+    fi
+
+    test_start "component_before_llm_guard_routes_exact_russian_update_prompt_into_native_crud_under_posix_locale"
+    local before_llm_posix_update_output
+    before_llm_posix_update_output="$(
+        env PATH="$MINIMAL_PATH" \
+            LANG= \
+            LC_ALL=C \
+            LC_CTYPE=POSIX \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,post-close-task-classifier,openclaw-improvement-learner,telegram-learner,telegram-chat-probe' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","session_key":"session:posix-before-update","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Обнови навык codex-update: добавь дедупликацию по last_alert_fingerprint."}],"tool_count":37,"iteration":1}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_posix_update_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_posix_update_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_posix_update_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_posix_update_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("Telegram-safe skill-detail hard override") | not' >/dev/null 2>&1 <<<"$before_llm_posix_update_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("не чиню и не отлаживаю") | not' >/dev/null 2>&1 <<<"$before_llm_posix_update_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must keep an exact Russian update-skill prompt on the native CRUD lane under POSIX locale"
+    fi
+
     test_start "component_before_llm_guard_hard_overrides_skill_visibility_queries_to_deterministic_runtime_list"
     local before_llm_skill_visibility_output
     before_llm_skill_visibility_output="$(

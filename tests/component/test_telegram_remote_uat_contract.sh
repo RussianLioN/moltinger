@@ -2703,6 +2703,24 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must allow Telegram skill delete only when the target existed before send and disappears from live /api/skills after the reply"
     fi
 
+    test_start "component_telegram_remote_uat_allows_skill_delete_for_exact_russian_prompt_with_trailing_period"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-trailing-dot" \
+        MOLTIS_CURL_STUB_MODE=delete_removed \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update." \
+        --output "$TEST_TMPDIR/result-skill-delete-trailing-dot.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must trim trailing sentence punctuation from the requested skill name for exact Russian delete prompts"
+    fi
+
     test_start "component_telegram_remote_uat_fails_skill_delete_when_target_missing_before_send"
     if PATH="$TEST_TMPDIR:$PATH" \
         MOLTIS_PASSWORD=test-password \
