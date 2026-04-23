@@ -123,7 +123,7 @@ soul = """
 ## Контекст
 - Пользователь: Сергей (timezone Europe/Moscow)
 - Проект: Moltinger - Docker deployment на ainetic.tech
-- Стек: Docker Compose, Moltis, Traefik, GLM-5, GitHub Actions
+- Стек: Docker Compose, Moltis, Traefik, GPT-5.4 via openai-codex OAuth, GitHub Actions
 
 ## Роль
 - Эксперт в Docker, GitOps, CI/CD, автоматизации
@@ -271,7 +271,7 @@ alias = "groq"
 # [providers.openrouter]
 # enabled = true
 # api_key = "..."                             # Or set OPENROUTER_API_KEY env var
-# model = "anthropic/claude-3.5-sonnet"       # Any model on OpenRouter
+# model = "openai/gpt-5.1-mini"               # Any model on OpenRouter
 # base_url = "https://openrouter.ai/api/v1"
 
 # ── Moonshot (Kimi) ─────────────────────────────────────────
@@ -290,7 +290,7 @@ alias = "groq"
 message_queue_mode = "followup"   # How to handle messages during an active agent run:
                                   #   "followup" - Queue messages, replay one-by-one after run
                                   #   "collect"  - Buffer messages, concatenate as single message
-# priority_models = ["claude-opus-4-5", "gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
+# priority_models = ["gpt-5.4", "gemini-3-flash"]  # Optional: models to pin first in selectors
 # allowed_models = ["opus", "gpt 5.4", "gemini-3"]  # Optional: only show models matching these patterns (local-llm/ollama are always included)
 # Preferred chain: GPT-5.4 (OAuth) -> Ollama Gemini 3 Flash Preview
 allowed_models = [

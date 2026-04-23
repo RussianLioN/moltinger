@@ -863,18 +863,19 @@ EOF
     test_start "component_codex_update_keeps_terminal_state_when_suppression_arm_fails"
     local codex_terminal_fail_tmp codex_terminal_fail_intent_dir codex_terminal_fail_marker codex_terminal_fail_intent_file
     local codex_terminal_fail_session_suppress codex_terminal_fail_chat_suppress codex_terminal_fail_before_output codex_terminal_fail_tool_output
-    local codex_terminal_fail_send_output codex_terminal_fail_repeat_send_output
+    local codex_terminal_fail_send_output codex_terminal_fail_repeat_send_output codex_terminal_fail_stderr_log
     codex_terminal_fail_tmp="$(secure_temp_dir telegram-safe-codex-update-terminal-fail)"
     codex_terminal_fail_intent_dir="$codex_terminal_fail_tmp/intent"
     codex_terminal_fail_marker="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.terminal"
     codex_terminal_fail_intent_file="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.intent"
     codex_terminal_fail_session_suppress="$codex_terminal_fail_intent_dir/session_codex-terminal-fail.suppress"
     codex_terminal_fail_chat_suppress="$codex_terminal_fail_intent_dir/chat-262872985.suppress"
+    codex_terminal_fail_stderr_log="$codex_terminal_fail_tmp/stderr.log"
     codex_terminal_fail_before_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_fail_stderr_log" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872985 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
 EOF
     )"
@@ -882,7 +883,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_fail_stderr_log" <<'EOF'
 {"event":"BeforeToolCall","session_key":"session:codex-terminal-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"action":"list"}}
 EOF
     )"
@@ -891,7 +892,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_fail_stderr_log" <<'EOF'
 {"event":"MessageSending","session_id":"session:codex-terminal-fail","data":{"account_id":"moltis-bot","to":"262872985","reply_to_message_id":1501,"text":""}}
 EOF
     )"
@@ -899,7 +900,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_fail_stderr_log" <<'EOF'
 {"event":"MessageSending","session_id":"session:codex-terminal-fail","data":{"account_id":"moltis-bot","to":"262872985","reply_to_message_id":1502,"text":"Проверил — и да, тут инструмент расписания реально сломан: на list он снова ответил missing action parameter."}}
 EOF
     )"
@@ -909,24 +910,26 @@ EOF
        jq -e --arg reply "$codex_terminal_reply_text" '.data.text == $reply' >/dev/null 2>&1 <<<"$codex_terminal_fail_send_output" && \
        [[ -f "$codex_terminal_fail_marker" ]] && \
        [[ -f "$codex_terminal_fail_intent_file" ]] && \
+       [[ ! -s "$codex_terminal_fail_stderr_log" ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_fail_repeat_send_output" && \
        jq -e --arg reply "$codex_terminal_reply_text" '.data.text == $reply' >/dev/null 2>&1 <<<"$codex_terminal_fail_repeat_send_output"; then
         test_pass
     else
-        test_fail "Codex-update terminalization must fail closed when suppression cannot be armed: keep the terminal marker and intent, then continue rewriting later dirty tails to the deterministic scheduler reply"
+        test_fail "Codex-update terminalization must fail closed when suppression cannot be armed: keep the terminal marker and intent, continue rewriting later dirty tails to the deterministic scheduler reply, and stay silent on stderr"
     fi
 
     test_start "component_codex_update_repeat_guard_survives_terminal_marker_write_failure"
     local codex_terminal_marker_fail_tmp codex_terminal_marker_fail_intent_dir codex_terminal_marker_fail_marker
-    local codex_terminal_marker_fail_before_output codex_terminal_marker_fail_tool_output codex_terminal_marker_fail_repeat_before_output
+    local codex_terminal_marker_fail_before_output codex_terminal_marker_fail_tool_output codex_terminal_marker_fail_repeat_before_output codex_terminal_marker_fail_stderr_log
     codex_terminal_marker_fail_tmp="$(secure_temp_dir telegram-safe-codex-update-marker-fail)"
     codex_terminal_marker_fail_intent_dir="$codex_terminal_marker_fail_tmp/intent"
     codex_terminal_marker_fail_marker="$codex_terminal_marker_fail_intent_dir/session_codex-terminal-marker-fail.terminal"
+    codex_terminal_marker_fail_stderr_log="$codex_terminal_marker_fail_tmp/stderr.log"
     codex_terminal_marker_fail_before_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_marker_fail_stderr_log" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872986 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"А разе у тебя нет крона по проверке вышедшей новой версии Codex cli?"}],"tool_count":37,"iteration":1}}
 EOF
     )"
@@ -935,7 +938,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_marker_fail_stderr_log" <<'EOF'
 {"event":"BeforeToolCall","session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"action":"list"}}
 EOF
     )"
@@ -943,7 +946,7 @@ EOF
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_terminal_marker_fail_intent_dir" \
-            bash "$HOOK_SCRIPT" <<'EOF'
+            bash "$HOOK_SCRIPT" 2>>"$codex_terminal_marker_fail_stderr_log" <<'EOF'
 {"event":"BeforeLLMCall","data":{"session_key":"session:codex-terminal-marker-fail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872986 | data_dir=/home/moltis/.moltis"}],"tool_count":37}}
 EOF
     )"
@@ -951,10 +954,11 @@ EOF
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
        jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output" && \
+       [[ ! -s "$codex_terminal_marker_fail_stderr_log" ]] && \
        jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output"; then
         test_pass
     else
-        test_fail "Codex-update repeat guard must still terminalize the blocked follow-up even when the .terminal marker itself cannot be written"
+        test_fail "Codex-update repeat guard must still terminalize the blocked follow-up even when the .terminal marker itself cannot be written, and it must stay silent on stderr"
     fi
 
     test_start "component_codex_update_terminal_state_does_not_leak_into_fresh_same_subject_turn"
@@ -2335,7 +2339,7 @@ EOF
     local before_tool_non_telegram_malformed_output
     before_tool_non_telegram_malformed_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeToolCall","data":{"session_key":"session:nontelegram-tool-malformed","provider":"glm","model":"glm::glm-5.1","tool":"exec","arguments":{"cmd":"cat /home/moltis/.moltis/skills/codex-update/SKILL.md"}}}'
+            '{"event":"BeforeToolCall","data":{"session_key":"session:nontelegram-tool-malformed","provider":"ollama","model":"ollama::gemini-3-flash-preview:cloud","tool":"exec","arguments":{"cmd":"cat /home/moltis/.moltis/skills/codex-update/SKILL.md"}}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
        jq -e '.data.session_key == "session:nontelegram-tool-malformed"' >/dev/null 2>&1 <<<"$before_tool_non_telegram_malformed_output" && \
@@ -2497,7 +2501,7 @@ EOF
     local after_non_telegram_malformed_output
     after_non_telegram_malformed_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:nontelegram-malformed","provider":"glm","model":"glm::glm-5.1","text":"Сейчас проверю память и потом покажу лог ошибки.","tool_calls":[{"name":"memory_search","arguments":{}}]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:nontelegram-malformed","provider":"ollama","model":"ollama::gemini-3-flash-preview:cloud","text":"Сейчас проверю память и потом покажу лог ошибки.","tool_calls":[{"name":"memory_search","arguments":{}}]}}'
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_non_telegram_malformed_output" && \
@@ -3678,7 +3682,7 @@ EOF
     local non_safe_output
     non_safe_output="$(
         run_hook_with_minimal_path \
-            '{"event":"AfterLLMCall","data":{"session_key":"session:mno","provider":"glm","model":"glm::glm-5.1","text":"plain response","tool_calls":[]}}'
+            '{"event":"AfterLLMCall","data":{"session_key":"session:mno","provider":"ollama","model":"ollama::gemini-3-flash-preview:cloud","text":"plain response","tool_calls":[]}}'
     )"
     if [[ -z "$non_safe_output" ]]; then
         test_pass

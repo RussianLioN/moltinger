@@ -1337,7 +1337,7 @@ persist_safe_lane_marker() {
         write_audit_line "safe_lane_set_failed key=$(basename "$lane_file") reason=mkdir"
         return 0
     fi
-    if ! printf '%s\n' "$(date +%s)" >"$lane_file" 2>/dev/null; then
+    if ! printf '%s\n' "$(date +%s)" 2>/dev/null >"$lane_file"; then
         rm -f "$lane_file" 2>/dev/null || true
         write_audit_line "safe_lane_set_failed key=$(basename "$lane_file") reason=write"
         return 0
@@ -1396,7 +1396,7 @@ persist_delivery_suppression() {
         write_audit_line "suppress_set_failed key=$(basename "$suppress_file") token=$token reason=mkdir"
         return 1
     fi
-    if ! printf '%s\t%s\n' "$(date +%s)" "$token" >"$suppress_file" 2>/dev/null; then
+    if ! printf '%s\t%s\n' "$(date +%s)" "$token" 2>/dev/null >"$suppress_file"; then
         rm -f "$suppress_file" 2>/dev/null || true
         write_audit_line "suppress_set_failed key=$(basename "$suppress_file") token=$token reason=write"
         return 1
@@ -1457,7 +1457,7 @@ persist_terminal_marker() {
         write_audit_line "terminal_set_failed key=$(basename "$terminal_file") token=$token reason=mkdir"
         return 1
     fi
-    if ! printf '%s\t%s\n' "$(date +%s)" "$token" >"$terminal_file" 2>/dev/null; then
+    if ! printf '%s\t%s\n' "$(date +%s)" "$token" 2>/dev/null >"$terminal_file"; then
         rm -f "$terminal_file" 2>/dev/null || true
         write_audit_line "terminal_set_failed key=$(basename "$terminal_file") token=$token reason=write"
         return 1
@@ -1689,7 +1689,7 @@ persist_turn_intent() {
         write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=mkdir"
         return 0
     fi
-    if ! printf '%s\t%s\t%s\n' "$(date +%s)" "$intent_name" "$turn_fingerprint" >"$intent_file" 2>/dev/null; then
+    if ! printf '%s\t%s\t%s\n' "$(date +%s)" "$intent_name" "$turn_fingerprint" 2>/dev/null >"$intent_file"; then
         rm -f "$intent_file" 2>/dev/null || true
         write_audit_line "intent_set_failed key=$(basename "$intent_file") intent=$intent_name reason=write"
         return 0
@@ -3091,10 +3091,10 @@ response_has_delivery_internal_trace() {
             | sed 's/[[:space:]][[:space:]]*/ /g'
     )"
 
-    if printf '%s' "$flat" | grep -Eiq "activity log([[:space:]]|$).*(•|running:|searching memory|fetching (github\\.com|https?://)|mcp tool error|validation errors for call\\[|tool-progress|mcp__|nodes_list|sessions_list|missing 'action' parameter|list failed:)"; then
+    if printf '%s' "$flat" | grep -Eiq "activity log([[:space:]]|$).*(•|running:|searching memory|fetching (github\\.com|https?://)|mcp tool error|validation errors for call\\[|tool-progress|mcp__|nodes_list|sessions_list|missing '(action|query|command)' parameter|list failed:)"; then
         return 0
     fi
-    if printf '%s' "$flat" | grep -Eiq "running:|searching memory|nodes_list|sessions_list|missing 'action' parameter|list failed:|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress"; then
+    if printf '%s' "$flat" | grep -Eiq "running:|searching memory|nodes_list|sessions_list|missing '(action|query|command)' parameter|list failed:|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress"; then
         return 0
     fi
     if printf '%s' "$flat" | grep -Eiq '(^|[[:space:]])(•|🔧|🗺️|💻|🔗|🌐|🧠|❌)[[:space:]]*mcp__'; then
@@ -3114,7 +3114,7 @@ delivery_internal_suffix_is_appended() {
             | sed 's/[[:space:]][[:space:]]*/ /g'
     )"
 
-    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+Activity log[[:space:]]+(•|running:|searching memory|fetching (github\.com|https?://)|mcp tool error|validation errors for call\[|tool-progress|mcp__|nodes_list|sessions_list|missing '\''action'\'' parameter|list failed:)'; then
+    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+Activity log[[:space:]]+(•|running:|searching memory|fetching (github\.com|https?://)|mcp tool error|validation errors for call\[|tool-progress|mcp__|nodes_list|sessions_list|missing '\''(action|query|command)'\'' parameter|list failed:)'; then
         return 0
     fi
     if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+•[[:space:]]+mcp__[A-Za-z0-9_:.:-]+'; then
@@ -3140,7 +3140,7 @@ strip_delivery_internal_suffix() {
 
     cleaned="$(
         printf '%s' "$cleaned" \
-            | sed -E 's/[[:space:]]+Activity log([[:space:]]*[•:-][[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call).*)$//I' \
+            | sed -E 's/[[:space:]]+Activity log([[:space:]]*[•:-][[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call|missing '\''(action|query|command)'\'' parameter).*)$//I' \
             | sed -E 's/[[:space:]]+•[[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call).*$//I'
     )"
 
@@ -3157,7 +3157,7 @@ clean_delivery_text_is_safe_for_direct_send() {
 
     [[ -n "$text" ]] || return 1
 
-    if printf '%s' "$text" | grep -Eiq 'running:|searching memory|thinking|nodes_list|sessions_list|mcp__|mcp tool error|validation errors for call\[|missing required argument|unexpected keyword argument|fetching (github\.com|https?://)|tool-progress|tool call'; then
+    if printf '%s' "$text" | grep -Eiq 'running:|searching memory|thinking|nodes_list|sessions_list|mcp__|mcp tool error|validation errors for call\[|missing required argument|missing '\''(action|query|command)'\'' parameter|unexpected keyword argument|fetching (github\.com|https?://)|tool-progress|tool call'; then
         return 1
     fi
 

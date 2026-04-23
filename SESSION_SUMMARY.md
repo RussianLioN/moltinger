@@ -1,7 +1,7 @@
 # Session Summary: Moltinger Project
 
 > **⚠️ ОБЯЗАТЕЛЬНОЕ ЧТЕНИЕ** в начале каждой сессии!
-> Обновляется после каждой значимой сессии. Последнее обновление: 2026-03-15
+> Обновляется после каждой значимой сессии. Последнее обновление: 2026-04-21
 
 ---
 
@@ -20,14 +20,45 @@
 | **Container** | Docker Compose |
 | **AI Assistant** | Moltis (ghcr.io/moltis-org/moltis:latest) |
 | **Telegram Bot** | @moltinger_bot |
-| **LLM Provider** | GLM-5 (Zhipu AI) via api.z.ai |
-| **LLM Fallback** | Ollama Sidecar + Gemini-3-flash-preview:cloud |
+| **Primary Model Contract** | GPT-5.4 via `openai-codex` OAuth |
+| **Fallback Contract** | Ollama cloud model only (`ollama::gemini-3-flash-preview:cloud`) |
 | **CI/CD** | GitHub Actions |
 | **Issue Tracking** | Beads |
 
 ---
 
 ## 📊 Current Status
+
+### Current Session Update (2026-04-21, remediation blockers lane)
+
+- Ветка в работе: `fix/project-remediation-blockers`
+- Канонические Speckit-пакеты для этой волны:
+  - `specs/041-project-remediation-blockers/`
+  - `specs/042-project-hygiene-drift-closure/`
+- Классификация старых planning surfaces:
+  - `specs/031-moltis-reliability-diagnostics/` — исторический закрытый reliability wave; не использовать как active remediation source of truth для текущего provider/runtime cleanup.
+  - `specs/002-moltis-n8n-integration/` — backlog-only exploratory package; не использовать как active source of truth для текущего runtime/deploy/provider contract.
+- Закрыт активный drift по provider/runtime/test surface:
+  - active deploy/test surface больше не требует `GLM_API_KEY`
+  - удалены retired GLM helper entrypoints из active repo surface
+  - runtime normalization чистит legacy `zai*` aliases и сохраняет canonical `openai-codex::gpt-5.4`
+- Закрыт active Telegram-safe drift:
+  - guard теперь распознаёт утечки `missing 'query' parameter` и `missing 'command' parameter`, а не только `missing 'action' parameter`
+  - authoritative `/status` UAT теперь требует exact canonical five-line safe-text contract
+  - live/provider proof теперь проверяет primary `openai-codex::gpt-5.4` до fallback surface
+- Закрыт cross-platform preflight drift:
+  - `scripts/preflight-check.sh` больше не даёт ложный negative на macOS/BSD при чтении TOML
+- Обновлены active docs/rules, чтобы они больше не описывали `tool_mode = "off"`, Z.ai/GLM или Anthropic fallback как текущий operational contract.
+- Проверки в этой линии:
+  - `bash tests/component/test_preflight_check.sh`
+  - `bash tests/component/test_prepare_moltis_runtime_config.sh`
+  - `bash tests/component/test_telegram_safe_llm_guard.sh`
+  - `bash tests/component/test_telegram_remote_uat_contract.sh`
+  - `bash tests/component/test_telegram_web_probe_correlation.sh`
+  - `bash tests/static/test_config_validation.sh`
+
+> Ниже остаются датированные исторические записи. Если они упоминают GLM/Z.ai или Anthropic,
+> считай это историческим контекстом, а не текущим active runtime/deploy contract.
 
 ### Current Session Update (2026-03-15, topology hotfix lane)
 
@@ -101,8 +132,9 @@ Server: ainetic.tech
 Moltis: Running ✅
 URL: https://moltis.ainetic.tech
 Telegram Bot: @moltinger_bot ✅
-LLM Provider: zai (GLM-5) ✅
-LLM Fallback: Ollama Sidecar ✅ (configured, ready to deploy)
+Primary Provider: openai-codex ✅
+Primary Model: openai-codex::gpt-5.4 ✅
+Fallback: ollama::gemini-3-flash-preview:cloud ✅
 Circuit Breaker: Configured ✅
 CI/CD: Working ✅ (with test suite)
 Test Suite: Integrated ✅ (unit/integration/security/e2e)
@@ -198,11 +230,13 @@ GitOps Compliance: Enforced ✅
 |--------|--------|---------|
 | `TELEGRAM_BOT_TOKEN` | ✅ | Bot token (@moltinger_bot) |
 | `TELEGRAM_ALLOWED_USERS` | ✅ | Allowed user IDs |
-| `GLM_API_KEY` | ✅ | LLM API (Zhipu AI) |
-| `OLLAMA_API_KEY` | ✅ | Ollama Cloud (optional - for cloud models) |
+| `OLLAMA_API_KEY` | ✅ | Ollama Cloud (optional - for cloud fallback models) |
 | `SSH_PRIVATE_KEY` | ✅ | Deploy key |
 | `MOLTIS_PASSWORD` | ✅ | Auth password |
 | `TAVILY_API_KEY` | ✅ | Web search |
+
+Primary GPT-5.4 reasoning uses the `openai-codex` OAuth flow and therefore does not depend on a
+tracked provider API key in the active GitHub Secrets contract.
 
 ### Source of Truth for Secrets (RCA-008)
 

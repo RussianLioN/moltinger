@@ -124,7 +124,7 @@ Phase 5 (IaC)            ░░░░░░░░░░░░   0% 📋
 
 | ID | Task | Priority | Issue | Status |
 |----|------|----------|-------|--------|
-| R1 | Fallback LLM provider (Groq/Anthropic) | P4 | moltinger-xh7 | 📋 Pending |
+| R1 | Fallback LLM hardening (Ollama cloud only) | P4 | moltinger-xh7 | 📋 Pending |
 | R2 | SearXNG self-hosted search | P4 | moltinger-6ql | 📋 Pending |
 
 ### Planned (New)

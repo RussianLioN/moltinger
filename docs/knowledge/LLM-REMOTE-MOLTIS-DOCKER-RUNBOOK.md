@@ -407,15 +407,18 @@ Fix:
 - use writable runtime config mounted at `/home/moltis/.config/moltis`
 - prepare it from static `./config` before restart
 
-### Symptom: Moltis UI still shows `glm-5.1` after a successful GPT-5.4 rollout
+### Symptom: Moltis UI still shows a stale non-canonical model after a successful GPT-5.4 rollout
 
 Likely cause:
 
 - the current session has an old session-level model selection persisted
+- or runtime-managed provider preferences were not re-normalized after the tracked config changed
 
 Fix:
 
 - open the model selector and manually switch the session to `GPT 5.4 (Codex/OAuth)`
+- if the selector keeps drifting, re-run runtime config normalization and verify
+  `provider_keys.json["openai-codex"].models[0] == "gpt-5.4"`
 
 ### Symptom: `auth status` is valid, but live chat still runs `openai-codex::gpt-5.4-mini`
 
@@ -654,10 +657,11 @@ Check:
 
 1. tracked `config/moltis.toml`
 2. authoritative `channels.list`
-3. whether the Telegram account is pinned to a dedicated text-only provider lane
-   (`model_provider` + provider `tool_mode = "off"`)
-4. `chat.history`
-5. whether the leak appears in final assistant content or only in delivered chat artifacts
+3. whether the Telegram account is pinned to the canonical guarded safe provider identity
+   (`model = openai-codex::gpt-5.4`, `model_provider = openai-codex`)
+4. whether the repo-owned Telegram-safe hook/guard is registered in the active runtime
+5. `chat.history`
+6. whether the leak appears in final assistant content or only in delivered chat artifacts
 
 If `chat.history` final reply is clean but the user still sees `Activity log`, treat it as
 transport/channel delivery leakage and prepare upstream handoff instead of only rewriting prompt

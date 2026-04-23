@@ -29,10 +29,12 @@ If the value is found in these sources, do not ask the user for it again.
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USERS`
-- `GLM_API_KEY`
 - `TAVILY_API_KEY`
 - `MOLTIS_PASSWORD`
 - `OLLAMA_API_KEY` (optional)
+
+Primary GPT-5.4 reasoning for Moltis uses the `openai-codex` OAuth path. It does not rely on a
+tracked `GLM_API_KEY` or Anthropic API-key contract in the active deploy surface.
 
 ## When Asking the User Is Allowed
 

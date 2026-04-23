@@ -317,9 +317,9 @@ receivers:
           *Description:* {{ .Annotations.description }}
 
           *Immediate Actions:*
-          1. Check official GLM (BigModel) API status
+          1. Check `openai-codex` auth state in the live Moltis runtime
           2. Check Ollama container: `docker logs ollama-fallback`
-          3. Verify OLLAMA_API_KEY is valid
+          3. Verify OLLAMA_API_KEY is valid for cloud fallback models
           4. Check network connectivity
 
           *State File:* `/tmp/moltis-llm-state.json`

@@ -339,7 +339,7 @@ groups:
           component: llm-failover
         annotations:
           summary: "Ollama fallback provider is unavailable"
-          description: "Ollama fallback is not available. If GLM fails, there will be no fallback option."
+          description: "Ollama fallback is not available. If the primary openai-codex / GPT-5.4 lane degrades, there will be no cloud fallback option."
 
       # High circuit breaker failure count
       - alert: HighCircuitBreakerFailures

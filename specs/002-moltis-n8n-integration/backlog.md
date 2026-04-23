@@ -1,5 +1,10 @@
 # Moltis + n8n Integration (Backlog)
 
+> Status note (2026-04-21): backlog-only exploratory package. It is not the
+> source of truth for the current Moltis provider/runtime/deploy remediation;
+> use `../041-project-remediation-blockers/` and
+> `../042-project-hygiene-drift-closure/` for the active remediation wave.
+
 **Priority**: Low
 **Status**: Backlog
 **Created**: 2026-02-16

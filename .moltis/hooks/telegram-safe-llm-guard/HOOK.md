@@ -15,7 +15,7 @@ bins = ["awk", "cut", "grep", "sed", "tr"]
 This repo-managed hook bundle is synced into the runtime-discovered project hook
 path for the Telegram safe lane. It rewrites `BeforeLLMCall`,
 `AfterLLMCall`, `BeforeToolCall`, and `MessageSending` payloads when the
-`custom-zai-telegram-safe` provider tries to drift into tool-backed or
+guarded Telegram-safe lane tries to drift into tool-backed or
 telemetry-leaking behavior or filesystem-based skill false negatives.
 It also fail-closes skill/codex-update maintenance-debug turns (`почини`,
 `исправь`, `отладь`, logs/root-cause requests) into a deterministic text-only

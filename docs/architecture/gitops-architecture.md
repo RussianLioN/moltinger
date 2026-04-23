@@ -12,6 +12,9 @@
 > [../runbooks/moltis-backup-safe-update.md](../runbooks/moltis-backup-safe-update.md).
 > If examples below mention `scripts/rollback.sh`, `restore-moltis.sh`, server-side `sed`,
 > or arbitrary tag rollback, treat them as legacy design notes rather than the current runtime contract.
+> The same applies to old provider examples such as `GLM_API_KEY`, Z.ai, or Anthropic API-key
+> fallback chains: the active contract is `openai-codex::gpt-5.4` via OAuth with optional
+> `OLLAMA_API_KEY` only for Ollama cloud fallback models.
 
 ---
 
@@ -186,7 +189,7 @@ jobs:
         run: |
           ssh $DEPLOY_USER@ainetic.tech "cat > $DEPLOY_PATH/.env << 'EOF'
           MOLTIS_PASSWORD=${{ secrets.MOLTIS_PASSWORD }}
-          GLM_API_KEY=${{ secrets.GLM_API_KEY }}
+          OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}
           EOF"
 
       - name: Deploy with Docker Compose
@@ -418,7 +421,7 @@ The helper reuses the latest tracked backup reference, restore-check evidence, a
 |-------------|-------------|------------|
 | `DEPLOY_SSH_KEY` | Private SSH key for server access | `Settings > Secrets > Actions > New` |
 | `MOLTIS_PASSWORD` | Moltis authentication password | Generate: `openssl rand -base64 32` |
-| `GLM_API_KEY` | Zhipu AI API key | Get from: https://open.bigmodel.cn/ |
+| `OLLAMA_API_KEY` | Optional API key for Ollama cloud fallback models | Set only if cloud Ollama fallback is enabled |
 
 ### 4.3 Настройка секретов
 
@@ -435,8 +438,8 @@ cat deploy_key.pub  # Добавить в ~/.ssh/authorized_keys на серве
 # 3. Добавить MOLTIS_PASSWORD
 openssl rand -base64 32  # Сгенерировать пароль
 
-# 4. Добавить GLM_API_KEY
-# Получить с портала Zhipu AI
+# 4. Добавить OLLAMA_API_KEY (опционально, только для cloud fallback)
+# Primary GPT-5.4 path использует openai-codex OAuth, а не отдельный API key secret
 ```
 
 ### 4.4 Local Development
@@ -630,14 +633,14 @@ bash deploy/setup-server.sh
 # Repository > Settings > Secrets > Actions
 # - DEPLOY_SSH_KEY
 # - MOLTIS_PASSWORD
-# - GLM_API_KEY
+# - OLLAMA_API_KEY (optional)
 
 # 3. Создать .env на сервере (первичный деплой)
 ssh deploy@ainetic.tech
 cd /opt/moltinger
 cat > .env << EOF
 MOLTIS_PASSWORD=$(openssl rand -base64 32)
-GLM_API_KEY=your_key_here
+OLLAMA_API_KEY=your_optional_key_here
 EOF
 
 # 4. Запустить первый деплой
@@ -693,7 +696,7 @@ cd /opt/moltinger
 
 1. **Создать файлы инфраструктуры** - добавить предложенные скрипты
 2. **Настроить GitHub Actions** - создать `.github/workflows/deploy.yml`
-3. **Добавить GitHub Secrets** - DEPLOY_SSH_KEY, MOLTIS_PASSWORD, GLM_API_KEY
+3. **Добавить GitHub Secrets** - DEPLOY_SSH_KEY, MOLTIS_PASSWORD, OLLAMA_API_KEY (optional)
 4. **Протестировать деплой** - сделать тестовый пуш в main
 5. **Настроить мониторинг** - добавить health check cron job
 6. **Документировать runbook** - инструкции для дежурных
