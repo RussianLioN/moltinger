@@ -769,10 +769,10 @@ rate_limit_window_secs = 60
 # intake surface, but Telegram stays `one_way_only` in this repo.
 # Official Moltis docs currently make two relevant limits explicit:
 # 1. Telegram channel capabilities do not advertise interactive components.
-# 2. `MessageReceived` and `Command` hooks are read-only, so they cannot
-#    terminally consume ingress before generic chat.
-# Because of that, do not wire repo-managed advisory routing to
-# `MessageReceived` here and do not advertise callback/recovery UX as live.
+# 2. `MessageReceived` can now modify/block inbound text, but `Command` stays
+#    read-only and Telegram still has no interactive callback components.
+# Because of that, keep repo-managed advisory UX one-way-only: deterministic
+# ingress gating is allowed, but callback/recovery UX is still not live.
 #
 # Future Moltis-native intake example:
 #
@@ -796,7 +796,7 @@ rate_limit_window_secs = 60
 [[hooks.hooks]]
 name = "telegram-safe-llm-guard"
 command = "./scripts/telegram-safe-llm-guard.sh"
-events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]
+events = ["MessageReceived", "BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]
 timeout = 5
 
 # [hooks]
@@ -810,6 +810,7 @@ timeout = 5
 #     "AfterLLMCall",              # After LLM response, before tool execution
 #     "BeforeToolCall",            # Before a tool executes
 #     "BeforeCompaction",          # Before context window compaction
+#     "MessageReceived",           # When an inbound channel/UI message arrives
 #     "MessageSending",            # Before sending a response to the user
 #     "ToolResultPersist",         # When a tool result is persisted
 #     #
@@ -817,7 +818,6 @@ timeout = 5
 #     "AfterToolCall",             # After a tool completes
 #     "AfterCompaction",           # After context is compacted
 #     "AgentEnd",                  # When the agent loop finishes
-#     "MessageReceived",           # When a user message arrives
 #     "MessageSent",               # After a response is delivered
 #     "SessionStart",              # When a new session begins
 #     "SessionEnd",                # When a session ends

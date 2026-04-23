@@ -53,12 +53,14 @@ SSH
 setup_fake_curl() {
     FAKE_CURL_BIN_DIR="$(secure_temp_dir fake-curl-bin)"
 
-    cat > "$FAKE_CURL_BIN_DIR/curl" <<'CURL'
+cat > "$FAKE_CURL_BIN_DIR/curl" <<'CURL'
 #!/usr/bin/env bash
 set -euo pipefail
 
 state_dir="${FAKE_SSH_STATE_DIR:?}"
 printf '%s\n' "$@" > "$state_dir/curl-args.txt"
+stdin_config="$(cat)"
+printf '%s' "$stdin_config" > "$state_dir/curl-stdin.txt"
 
 payload=""
 args=("$@")
@@ -228,7 +230,11 @@ SENDER
     )"
 
     assert_contains "$output" '"ok":true' "Remote wrapper should fall back to direct Bot API call for legacy remote sender"
-    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/curl-args.txt")" "https://api.telegram.org/botfake-token/sendMessage" "Fallback should call Telegram Bot API with the remote token"
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/curl-args.txt")" "--config" "Fallback should configure curl via stdin instead of argv URL"
+    if grep -Fq 'fake-token' "$FAKE_SSH_STATE_DIR/curl-args.txt"; then
+        test_fail "Fallback should not expose the Telegram token in curl argv"
+    fi
+    assert_contains "$(cat "$FAKE_SSH_STATE_DIR/curl-stdin.txt")" "https://api.telegram.org/botfake-token/sendMessage" "Fallback should still target the remote Bot API URL through curl config stdin"
     assert_contains "$(cat "$FAKE_SSH_STATE_DIR/curl-payload.json")" "\"reply_markup\"" "Fallback payload should preserve reply_markup"
     assert_contains "$(cat "$FAKE_SSH_STATE_DIR/curl-payload.json")" "inline_keyboard" "Fallback payload should preserve inline keyboard JSON"
     test_pass

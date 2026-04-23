@@ -269,17 +269,17 @@ run_static_config_validation_tests() {
     test_start "static_telegram_safe_lane_registers_llm_guard_hook"
     if rg -Fq 'name = "telegram-safe-llm-guard"' "$TOML_CONFIG" && \
        rg -Fq 'command = "./scripts/telegram-safe-llm-guard.sh"' "$TOML_CONFIG" && \
-       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TOML_CONFIG"; then
+       rg -Fq 'events = ["MessageReceived", "BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Tracked Moltis config must register a Telegram-safe LLM guard hook so user-facing Telegram replies cannot drift into tool fallback or activity-log leakage"
+        test_fail "Tracked Moltis config must register a Telegram-safe guard starting at MessageReceived so deterministic Telegram replies can be intercepted before generic chat drifts into tool fallback or activity-log leakage"
     fi
 
     test_start "static_telegram_safe_lane_ships_project_local_hook_package"
     if [[ -f "$TELEGRAM_SAFE_HOOK_MANIFEST" ]] && \
        [[ -x "$TELEGRAM_SAFE_HOOK_HANDLER" ]] && \
        rg -Fq 'name = "telegram-safe-llm-guard"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
-       rg -Fq 'events = ["BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
+       rg -Fq 'events = ["MessageReceived", "BeforeLLMCall", "AfterLLMCall", "BeforeToolCall", "MessageSending"]' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        rg -Fq 'command = "./handler.sh"' "$TELEGRAM_SAFE_HOOK_MANIFEST" && \
        ! rg -Fq 'bins = ["jq"]' "$TELEGRAM_SAFE_HOOK_MANIFEST"; then
         test_pass
@@ -303,15 +303,15 @@ run_static_config_validation_tests() {
         test_fail "Telegram-safe hook runtime must stay shell-only, prestage repo-managed runtime hook copies before recreate, and deploy verification must attest live registration from the active data_dir hook path while the tracked bundle still exists under MOLTIS_REPO_HOOKS_SOURCE_ROOT"
     fi
 
-    test_start "static_codex_advisory_telegram_contract_stays_one_way_until_upstream_supports_terminal_ingress"
+    test_start "static_codex_advisory_telegram_contract_stays_one_way_until_interactive_components_exist"
     if rg -Fq 'Telegram channel capabilities do not advertise interactive components.' "$TOML_CONFIG" && \
-       rg -Fq '`MessageReceived` and `Command` hooks are read-only' "$TOML_CONFIG" && \
+       rg -Fq '`MessageReceived` can now modify/block inbound text, but `Command` stays' "$TOML_CONFIG" && \
        ! rg -Fq 'name = "codex-advisory-router"' "$TOML_CONFIG" && \
        [[ -f "$CODEX_UPSTREAM_WATCHER_REPORT_HELPER" ]] && \
        [[ -f "$CODEX_ADVISORY_DOC" ]] && \
        [[ -f "$CODEX_WATCHER_DOC" ]] && \
        rg -Fq 'Telegram channel не заявляет interactive components' "$CODEX_ADVISORY_DOC" && \
-       rg -Fq 'MessageReceived` и `Command` hooks остаются read-only' "$CODEX_ADVISORY_DOC" && \
+       rg -Fq 'MessageReceived` уже умеет modify/block inbound text' "$CODEX_ADVISORY_DOC" && \
        rg -Fq 'Telegram channel не заявляет interactive components' "$CODEX_WATCHER_DOC" && \
        ! rg -Fq "python3 - \\" "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
        ! rg -Fq '/codex_da' "$CODEX_UPSTREAM_WATCHER_SCRIPT" && \
@@ -320,7 +320,7 @@ run_static_config_validation_tests() {
        ! rg -Fq 'codex-consent:' "$CODEX_UPSTREAM_WATCHER_SCRIPT"; then
         test_pass
     else
-        test_fail "Codex advisory Telegram contract must stay honest: repo config/docs must state the official one-way limitation, no MessageReceived router hook should be configured, and watcher source must not carry retired /codex_* or codex-consent artifacts"
+        test_fail "Codex advisory Telegram contract must stay honest: repo config/docs must reflect that one-way mode is now caused by missing interactive components rather than a read-only MessageReceived myth, and watcher source must not carry retired /codex_* or codex-consent artifacts"
     fi
 
     test_start "static_codex_advisory_report_renderers_use_file_backed_helpers"

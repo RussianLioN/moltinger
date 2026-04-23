@@ -20,7 +20,7 @@
 Причина теперь зафиксирована явно:
 
 - в официальной документации Moltis Telegram channel не заявляет interactive components;
-- `MessageReceived` и `Command` hooks остаются read-only, то есть не могут терминально перехватить ingress раньше generic chat.
+- `MessageReceived` уже умеет modify/block inbound text, но `Command` остаётся read-only, а честный interactive follow-up без callback-capability всё равно нельзя безопасно обещать.
 
 ## Новый producer contract
 

@@ -224,7 +224,7 @@ run_component_codex_cli_upstream_watcher_tests() {
     assert_eq "disabled" "$(jq -r '.followup.consent.status' "$report")" "Retired watcher flow should keep consent disabled"
     assert_eq "one_way_only" "$(jq -r '.followup.consent.router_mode' "$report")" "Retired watcher flow should stay in one-way mode"
     assert_contains "$(jq -r '.notes[]' "$report")" "Telegram without interactive components" "Watcher should explain the official Telegram capability limit"
-    assert_contains "$(jq -r '.followup.consent.reason' "$report")" "MessageReceived и Command hooks остаются read-only" "Watcher should surface the root-cause constraint directly in the report"
+    assert_contains "$(jq -r '.followup.consent.reason' "$report")" "MessageReceived уже умеет modify/block inbound text" "Watcher should surface the updated ingress capability directly in the report"
     if [[ "$(jq -r '.followup.consent.pending_state == null' "$report")" != "true" ]]; then
         test_fail "Retired watcher flow must not keep a pending consent state"
     elif printf '%s\n' "$call_text" | grep -q "Хотите получить практические рекомендации"; then

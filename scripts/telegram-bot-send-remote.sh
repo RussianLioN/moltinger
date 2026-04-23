@@ -206,7 +206,7 @@ send_via_remote_script() {
 }
 
 send_via_direct_api() {
-  local token payload
+  local token payload api_url
 
   token="$(resolve_telegram_token)" || {
     echo '{"ok":false,"error":"TELEGRAM_BOT_TOKEN is not set on remote host","script":"telegram-bot-send-remote.sh"}'
@@ -236,11 +236,13 @@ send_via_direct_api() {
       + (if ($reply_markup_json|length) > 0 then {reply_markup: ($reply_markup_json|fromjson)} else {} end)'
   )"
 
-  curl -sS --max-time "${TELEGRAM_TIMEOUT_SECONDS:-20}" \
-    -X POST \
-    -H "content-type: application/json" \
-    -d "$payload" \
-    "https://api.telegram.org/bot${token}/sendMessage"
+  api_url="https://api.telegram.org/bot${token}/sendMessage"
+  printf 'url = "%s"\n' "$api_url" \
+    | curl -sS --max-time "${TELEGRAM_TIMEOUT_SECONDS:-20}" \
+        -X POST \
+        -H "content-type: application/json" \
+        -d "$payload" \
+        --config -
 }
 
 cd "$remote_root"

@@ -22,6 +22,8 @@ make_fake_curl_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" >"${FAKE_CURL_ARGS_FILE:?}"
+stdin_config="$(cat)"
+printf '%s' "$stdin_config" >"${FAKE_CURL_STDIN_FILE:?}"
 payload=""
 args=("$@")
 for i in "${!args[@]}"; do
@@ -60,7 +62,7 @@ run_component_telegram_bot_send_tests() {
     fi
 
     test_start "component_telegram_bot_send_basic_send_works_without_jq"
-    local basic_tmp basic_bin basic_args basic_payload basic_output
+    local basic_tmp basic_bin basic_args basic_payload basic_stdin basic_output
     basic_tmp="$(secure_temp_dir telegram-bot-send-basic)"
     basic_bin="$basic_tmp/bin"
     mkdir -p "$basic_bin"
@@ -68,10 +70,12 @@ run_component_telegram_bot_send_tests() {
     make_broken_jq_bin "$basic_bin"
     basic_args="$basic_tmp/curl-args.txt"
     basic_payload="$basic_tmp/curl-payload.json"
+    basic_stdin="$basic_tmp/curl-stdin.txt"
     basic_output="$(
         PATH="$basic_bin:/usr/bin:/bin" \
         FAKE_CURL_ARGS_FILE="$basic_args" \
         FAKE_CURL_PAYLOAD_FILE="$basic_payload" \
+        FAKE_CURL_STDIN_FILE="$basic_stdin" \
         FAKE_CURL_RESPONSE='{"ok":true,"result":{"message_id":101}}' \
         TELEGRAM_BOT_TOKEN='test-token' \
         /bin/bash "$SEND_SCRIPT" \
@@ -79,7 +83,9 @@ run_component_telegram_bot_send_tests() {
             --text $'Строка 1\nСтрока 2'
     )"
     if [[ "$basic_output" == *'"ok":true'* ]] && \
-       grep -Fq 'https://api.telegram.org/bottest-token/sendMessage' "$basic_args" && \
+       grep -Fq -- '--config' "$basic_args" && \
+       ! grep -Fq 'test-token' "$basic_args" && \
+       grep -Fq 'https://api.telegram.org/bottest-token/sendMessage' "$basic_stdin" && \
        grep -Fq '"chat_id":"262872984"' "$basic_payload" && \
        grep -Fq '"text":"Строка 1\nСтрока 2"' "$basic_payload" && \
        grep -Fq '"disable_notification":false' "$basic_payload"; then
@@ -89,17 +95,19 @@ run_component_telegram_bot_send_tests() {
     fi
 
     test_start "component_telegram_bot_send_reply_markup_works_without_jq"
-    local markup_tmp markup_bin markup_payload markup_output
+    local markup_tmp markup_bin markup_payload markup_stdin markup_output
     markup_tmp="$(secure_temp_dir telegram-bot-send-markup)"
     markup_bin="$markup_tmp/bin"
     mkdir -p "$markup_bin"
     make_fake_curl_bin "$markup_bin"
     make_broken_jq_bin "$markup_bin"
     markup_payload="$markup_tmp/curl-payload.json"
+    markup_stdin="$markup_tmp/curl-stdin.txt"
     markup_output="$(
         PATH="$markup_bin:/usr/bin:/bin" \
         FAKE_CURL_ARGS_FILE="$markup_tmp/curl-args.txt" \
         FAKE_CURL_PAYLOAD_FILE="$markup_payload" \
+        FAKE_CURL_STDIN_FILE="$markup_stdin" \
         FAKE_CURL_RESPONSE='{"ok":true,"result":{"message_id":102}}' \
         TELEGRAM_BOT_TOKEN='test-token' \
         /bin/bash "$SEND_SCRIPT" \
@@ -108,6 +116,7 @@ run_component_telegram_bot_send_tests() {
             --reply-markup-json '{"inline_keyboard":[[{"text":"Да","callback_data":"x"}]]}'
     )"
     if [[ "$markup_output" == *'"ok":true'* ]] && \
+       grep -Fq 'https://api.telegram.org/bottest-token/sendMessage' "$markup_stdin" && \
        grep -Fq '"reply_markup":{"inline_keyboard":[[{"text":"Да","callback_data":"x"}]]}' "$markup_payload"; then
         test_pass
     else
@@ -126,6 +135,7 @@ run_component_telegram_bot_send_tests() {
         PATH="$fail_bin:/usr/bin:/bin" \
         FAKE_CURL_ARGS_FILE="$fail_tmp/curl-args.txt" \
         FAKE_CURL_PAYLOAD_FILE="$fail_tmp/curl-payload.json" \
+        FAKE_CURL_STDIN_FILE="$fail_tmp/curl-stdin.txt" \
         FAKE_CURL_RESPONSE='{"ok":false,"description":"Forbidden"}' \
         TELEGRAM_BOT_TOKEN='test-token' \
         /bin/bash "$SEND_SCRIPT" \
