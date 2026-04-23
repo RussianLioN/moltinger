@@ -30,7 +30,7 @@ make version-check
 Production Moltis updates are git-based and backup-safe only.
 
 The tracked version must point to a published GHCR container tag, not only to a GitHub release tag.
-Use GHCR tag format without a leading `v` (for example `20260421.05`, not `v20260421.05`).
+Use GHCR tag format without a leading `v` (for example `20260423.01`, not `v20260423.01`).
 
 Allowed:
 

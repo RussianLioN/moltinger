@@ -157,7 +157,7 @@ assert_explicit_release_tag() {
     fi
 
     if [[ "$version" == v* ]]; then
-        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 20260421.05)" >&2
+        echo "Tracked Moltis version must use GHCR tag format without leading 'v' (example: 20260423.01)" >&2
         return 1
     fi
 
