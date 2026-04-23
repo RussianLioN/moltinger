@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
-**Generated**: 2026-04-20
-**Total Lessons**: 85
+**Generated**: 2026-04-23
+**Total Lessons**: 86
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (41 lessons)
+#### P1 (42 lessons)
+- [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [GitHub Actions bad logs from post-deploy image prune and calendar tag rejection](../docs/rca/2026-04-20-github-actions-bad-logs-from-post-deploy-image-prune-and-calendar-tag-rejection.md)
 - [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
@@ -188,7 +189,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (5 lessons)
+#### product (6 lessons)
+- [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
 - [Telegram codex-update hard override did not terminalize blocked tool follow-up](../docs/rca/2026-04-14-telegram-codex-update-hard-override-did-not-terminalize-blocked-tool-followup.md)
@@ -214,16 +216,16 @@
 
 ### Popular Tags
 
-- `rca` (32 lessons)
-- `moltis` (27 lessons)
-- `telegram` (21 lessons)
+- `rca` (33 lessons)
+- `moltis` (28 lessons)
+- `telegram` (22 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `skills` (12 lessons)
+- `skills` (13 lessons)
 - `beads` (12 lessons)
-- `process` (9 lessons)
+- `hooks` (10 lessons)
 
 
 ---
@@ -232,10 +234,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 85 |
-| Critical (P0/P1) | 42 |
+| Total Lessons | 86 |
+| Critical (P0/P1) | 43 |
 | Categories | 8 |
-| Unique Tags | 166 |
+| Unique Tags | 167 |
 
 ---
 

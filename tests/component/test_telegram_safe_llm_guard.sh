@@ -2318,6 +2318,62 @@ EOF
         test_fail "BeforeToolCall guard must allow native update_skill, patch_skill, delete_skill, and write_skill_files passthrough for owner Telegram skill CRUD"
     fi
 
+    test_start "component_before_tool_guard_canonicalizes_live_read_skill_envelope_without_blocking"
+    local before_tool_read_skill_envelope_output
+    before_tool_read_skill_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:read-skill-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"read_skill","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984","surface":"telegram"},"_session_key":"session:read-skill-envelope","file_path":null,"name":"codex-update"}}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.session_key == "session:read-skill-envelope"' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.tool == "read_skill"' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.tool_name == "read_skill"' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.arguments.name == "codex-update"' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.arguments | has("_channel") | not' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.arguments | has("_session_key") | not' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output" && \
+       jq -e '.data.arguments | has("file_path") | not' >/dev/null 2>&1 <<<"$before_tool_read_skill_envelope_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must normalize valid read_skill argument envelopes to the native tool instead of blocking or hiding them"
+    fi
+
+    test_start "component_before_tool_guard_canonicalizes_valid_runtime_tool_envelopes_to_original_tools"
+    local before_tool_memory_envelope_output before_tool_exec_envelope_output before_tool_cron_envelope_output before_tool_glob_envelope_output before_tool_fetch_envelope_output before_tool_browser_envelope_output
+    before_tool_memory_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:memory-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"memory_search","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:memory-envelope","limit":10,"query":"codex-update last announced version","filter":null}}}'
+    )"
+    before_tool_exec_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:exec-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"exec","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:exec-envelope","command":"pwd","timeout":20000,"working_dir":"/home/moltis/.moltis","reason":null}}}'
+    )"
+    before_tool_cron_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:cron-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"cron","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:cron-envelope","action":"list","limit":50,"id":null,"job":null}}}'
+    )"
+    before_tool_glob_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:glob-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"Glob","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:glob-envelope","path":"/home/moltis/.moltis","pattern":"**/codex-update/**","exclude":null}}}'
+    )"
+    before_tool_fetch_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:fetch-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"web_fetch","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:fetch-envelope","url":"https://docs.moltis.org/skill-tools.html","extract_mode":"text","max_chars":12000,"selector":null}}}'
+    )"
+    before_tool_browser_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:browser-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"browser","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:browser-envelope","action":"open","url":"https://example.com","session_id":null}}}'
+    )"
+    if jq -e '.action == "modify" and .data.tool == "memory_search" and .data.arguments.query == "codex-update last announced version" and .data.arguments.limit == 10 and (.data.arguments | has("_channel") | not) and (.data.arguments | has("filter") | not)' >/dev/null 2>&1 <<<"$before_tool_memory_envelope_output" && \
+       jq -e '.action == "modify" and .data.tool == "exec" and .data.arguments.command == "pwd" and .data.arguments.timeout == 20000 and .data.arguments.working_dir == "/home/moltis/.moltis" and (.data.arguments | has("_session_key") | not) and (.data.arguments | has("reason") | not)' >/dev/null 2>&1 <<<"$before_tool_exec_envelope_output" && \
+       jq -e '.action == "modify" and .data.tool == "cron" and .data.arguments.action == "list" and .data.arguments.limit == 50 and (.data.arguments | has("id") | not) and (.data.arguments | has("job") | not)' >/dev/null 2>&1 <<<"$before_tool_cron_envelope_output" && \
+       jq -e '.action == "modify" and .data.tool == "Glob" and .data.arguments.pattern == "**/codex-update/**" and .data.arguments.path == "/home/moltis/.moltis" and (.data.arguments | has("exclude") | not)' >/dev/null 2>&1 <<<"$before_tool_glob_envelope_output" && \
+       jq -e '.action == "modify" and .data.tool == "web_fetch" and .data.arguments.url == "https://docs.moltis.org/skill-tools.html" and .data.arguments.max_chars == 12000 and (.data.arguments | has("selector") | not)' >/dev/null 2>&1 <<<"$before_tool_fetch_envelope_output" && \
+       jq -e '.action == "modify" and .data.tool == "browser" and .data.arguments.action == "open" and .data.arguments.url == "https://example.com" and (.data.arguments | has("session_id") | not)' >/dev/null 2>&1 <<<"$before_tool_browser_envelope_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must fix valid live runtime envelopes at the argument boundary and preserve the original tool identity"
+    fi
+
     test_start "component_before_tool_guard_blocks_disallowed_browser_tool_in_safe_lane"
     local before_tool_browser_output
     before_tool_browser_output="$(
