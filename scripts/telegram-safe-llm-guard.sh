@@ -743,6 +743,116 @@ append_optional_number_field() {
     fi
 }
 
+canonicalize_known_tool_arguments_json() {
+    local tool_name="${1:-}"
+    local arguments_json="${2:-}"
+    local canonicalized=""
+
+    [[ -n "$tool_name" && -n "$arguments_json" ]] || return 1
+    case "$arguments_json" in
+        *'"_channel"'*|*'"_session_key"'*|*':null'*|*': null'*)
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    command -v python3 >/dev/null 2>&1 || return 1
+
+    canonicalized="$(
+        printf '%s' "$arguments_json" | python3 -c '
+import json
+import sys
+
+tool = sys.argv[1] if len(sys.argv) > 1 else ""
+raw = sys.stdin.read()
+
+try:
+    args = json.loads(raw)
+except Exception:
+    raise SystemExit(1)
+
+if not isinstance(args, dict):
+    raise SystemExit(1)
+
+requirements = {
+    "read_skill": ("string", "name"),
+    "memory_search": ("string", "query"),
+    "exec": ("string", "command"),
+    "cron": ("string", "action"),
+    "process": ("string", "action"),
+    "Glob": ("string", "pattern"),
+    "web_fetch": ("string", "url"),
+    "browser": ("string", "action"),
+    "create_skill": ("string", "name"),
+    "update_skill": ("string", "name"),
+    "patch_skill": ("all_strings", ("name", "instructions")),
+    "delete_skill": ("string", "name"),
+    "write_skill_files": ("name_and_files", None),
+    "mcp__tavily__tavily_search": ("string", "query"),
+}
+
+requirement = requirements.get(tool)
+if requirement is None:
+    raise SystemExit(1)
+
+def nonempty_string(value):
+    return isinstance(value, str) and bool(value.strip())
+
+kind, spec = requirement
+if kind == "string":
+    if not nonempty_string(args.get(spec)):
+        raise SystemExit(1)
+elif kind == "all_strings":
+    if not all(nonempty_string(args.get(key)) for key in spec):
+        raise SystemExit(1)
+elif kind == "name_and_files":
+    files = args.get("files")
+    if not nonempty_string(args.get("name")) or not isinstance(files, list):
+        raise SystemExit(1)
+    if not any(isinstance(item, dict) for item in files):
+        raise SystemExit(1)
+else:
+    raise SystemExit(1)
+
+changed = False
+
+def clean(value):
+    global changed
+    if isinstance(value, dict):
+        output = {}
+        for key, nested in value.items():
+            if key.startswith("_") or nested is None:
+                changed = True
+                continue
+            cleaned = clean(nested)
+            if cleaned is None:
+                changed = True
+                continue
+            output[key] = cleaned
+        return output
+    if isinstance(value, list):
+        output = []
+        for item in value:
+            cleaned = clean(item)
+            if cleaned is None:
+                changed = True
+                continue
+            output.append(cleaned)
+        return output
+    return value
+
+cleaned_args = clean(args)
+if not changed:
+    raise SystemExit(1)
+
+print(json.dumps(cleaned_args, ensure_ascii=False, separators=(",", ":")))
+        ' "$tool_name"
+    )" || return 1
+
+    [[ -n "$canonicalized" ]] || return 1
+    printf '%s' "$canonicalized"
+}
+
 append_field_to_object() {
     local object_json="$1"
     local field_fragment="$2"
@@ -3283,6 +3393,9 @@ tool_call_has_missing_required_arguments() {
     [[ -n "$arguments_json" ]] || arguments_json='{}'
 
     case "$tool_name" in
+        read_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
         memory_search)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "query"
             ;;
@@ -3290,6 +3403,18 @@ tool_call_has_missing_required_arguments() {
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "command"
             ;;
         cron)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
+            ;;
+        process)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
+            ;;
+        Glob)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "pattern"
+            ;;
+        web_fetch)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "url"
+            ;;
+        browser)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
             ;;
         create_skill)
@@ -3308,6 +3433,9 @@ tool_call_has_missing_required_arguments() {
         write_skill_files)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
             ! json_array_field_has_object_entries_from_text "$arguments_json" "files"
+            ;;
+        mcp__tavily__tavily_search)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "query"
             ;;
         *)
             return 1
@@ -3354,7 +3482,7 @@ tool_name_is_allowlisted() {
 tool_name_is_skill_allowlisted() {
     local tool_name="${1:-}"
     case "$tool_name" in
-        create_skill|update_skill|patch_skill|delete_skill|write_skill_files|session_state|send_message|send_image)
+        read_skill|create_skill|update_skill|patch_skill|delete_skill|write_skill_files|session_state|send_message|send_image)
             return 0
             ;;
         *)
@@ -4037,6 +4165,15 @@ fi
 already_guarded_long_research=false
 if printf '%s' "$payload_flat" | grep -Fq 'Telegram-safe long-research guard'; then
     already_guarded_long_research=true
+fi
+
+if [[ "$event" == "BeforeToolCall" ]]; then
+    canonicalized_tool_arguments_json="$(canonicalize_known_tool_arguments_json "$tool_name" "${tool_arguments_json:-}" || true)"
+    if [[ -n "${canonicalized_tool_arguments_json:-}" ]]; then
+        write_audit_line "emit_modify event=$event reason=canonical_tool_arguments tool=${tool_name:-missing} telegram_safe=$is_telegram_safe_lane"
+        emit_before_tool_modified_payload "$tool_name" "$canonicalized_tool_arguments_json"
+        exit 0
+    fi
 fi
 
 if [[ "$event" == "MessageSending" ]]; then
