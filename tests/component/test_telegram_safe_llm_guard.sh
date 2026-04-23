@@ -1136,6 +1136,75 @@ EOF
         test_fail "Direct skill-detail fastpath must resolve the runtime skill, answer from SKILL.md, and leave only a same-turn delivery-suppression marker"
     fi
 
+    test_start "component_before_llm_guard_direct_fastpaths_live_codex_update_skill_detail_when_last_system_is_datetime"
+    local fastpath_skill_detail_live_tmp fastpath_skill_detail_live_send_script fastpath_skill_detail_live_log fastpath_skill_detail_live_stdout fastpath_skill_detail_live_stderr fastpath_skill_detail_live_status fastpath_skill_detail_live_intent_dir fastpath_skill_detail_live_suppress_file fastpath_skill_detail_live_runtime_root fastpath_skill_detail_live_fakebin
+    fastpath_skill_detail_live_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-live)"
+    fastpath_skill_detail_live_send_script="$fastpath_skill_detail_live_tmp/send.sh"
+    fastpath_skill_detail_live_log="$fastpath_skill_detail_live_tmp/send.log"
+    fastpath_skill_detail_live_intent_dir="$fastpath_skill_detail_live_tmp/intent"
+    fastpath_skill_detail_live_suppress_file="$fastpath_skill_detail_live_intent_dir/session_livecodexdetail.suppress"
+    fastpath_skill_detail_live_runtime_root="$fastpath_skill_detail_live_tmp/runtime-skills"
+    fastpath_skill_detail_live_fakebin="$fastpath_skill_detail_live_tmp/fakebin"
+    mkdir -p "$fastpath_skill_detail_live_runtime_root/codex-update" "$fastpath_skill_detail_live_fakebin"
+    cp "$PROJECT_ROOT/skills/codex-update/SKILL.md" "$fastpath_skill_detail_live_runtime_root/codex-update/SKILL.md"
+    cat >"$fastpath_skill_detail_live_fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$fastpath_skill_detail_live_fakebin/python3"
+    cat >"$fastpath_skill_detail_live_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_skill_detail_live_send_script"
+    fastpath_skill_detail_live_stdout="$fastpath_skill_detail_live_tmp/stdout.log"
+    fastpath_skill_detail_live_stderr="$fastpath_skill_detail_live_tmp/stderr.log"
+    set +e
+    env PATH="$fastpath_skill_detail_live_fakebin:$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_skill_detail_live_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_RUNTIME_SKILLS_ROOT="$fastpath_skill_detail_live_runtime_root" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_skill_detail_live_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_skill_detail_live_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_skill_detail_live_stdout" 2>"$fastpath_skill_detail_live_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:livecodexdetail","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=4c3734b76ac1 | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"assistant","content":"Да. По сути уже разобрался: причина почти наверняка в том, что уведомление не дедуплицируется."},{"role":"system","content":"The current user datetime is 2026-04-23 18:09:48 MSK."},{"role":"user","content":"Открой навык codex-update и проверь, есть ли в нём дедупликация last_announced_version. Ничего не меняй, ответь кратко."}],"tool_count":55,"iteration":1}}
+EOF
+    fastpath_skill_detail_live_status=$?
+    set -e
+    if [[ "$fastpath_skill_detail_live_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_skill_detail_live_stdout" ]] && \
+       [[ ! -s "$fastpath_skill_detail_live_stderr" ]] && \
+       [[ -f "$fastpath_skill_detail_live_suppress_file" ]] && \
+       grep -Fq $'\tskill_detail:codex-update' "$fastpath_skill_detail_live_suppress_file" && \
+       grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_live_log" && \
+       grep -Fq 'codex-update' "$fastpath_skill_detail_live_log" && \
+       grep -Fq 'новая стабильная версия Codex CLI' "$fastpath_skill_detail_live_log" && \
+       ! grep -Eq "read_skill|missing 'name'|Activity log|/home/moltis" "$fastpath_skill_detail_live_log"; then
+        test_pass
+    else
+        test_fail "Live-shaped codex-update skill-detail prompts must use direct text-only skill detail fastpath even when the latest system message is only datetime"
+    fi
+
     test_start "component_before_llm_guard_skill_detail_direct_fastpath_falls_back_to_modify_when_suppression_cannot_be_armed"
     local fastpath_skill_detail_armfail_tmp fastpath_skill_detail_armfail_send_script fastpath_skill_detail_armfail_log fastpath_skill_detail_armfail_stdout fastpath_skill_detail_armfail_stderr fastpath_skill_detail_armfail_status fastpath_skill_detail_armfail_intent_dir fastpath_skill_detail_armfail_runtime_root fastpath_skill_detail_armfail_fakebin fastpath_skill_detail_armfail_output
     fastpath_skill_detail_armfail_tmp="$(secure_temp_dir telegram-safe-fastpath-skill-detail-armfail)"

@@ -424,6 +424,40 @@ NODE
         test_fail "Unquoted missing command parameter replies must be rejected by reply-quality checks"
     fi
 
+    test_start "component_telegram_web_probe_marks_missing_name_parameter_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+const badReplies = [
+  "read_skill в этой сессии возвращает missing 'name' даже при корректном вызове",
+  "read_skill снова вернул missing name"
+];
+for (const badReply of badReplies) {
+  if (!isReplyErrorSignature(badReply)) {
+    throw new Error(`expected missing name parameter to be rejected: ${badReply}`);
+  }
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Missing name parameter replies must be rejected by reply-quality checks"
+    fi
+
+    test_start "component_telegram_web_probe_marks_missing_pattern_parameter_as_error_signature"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { isReplyErrorSignature } = await import(process.env.NODE_SCRIPT);
+if (!isReplyErrorSignature("Glob снова вернул missing 'pattern' parameter")) {
+  throw new Error("expected missing pattern parameter to be rejected");
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Missing pattern parameter replies must be rejected by reply-quality checks"
+    fi
+
     test_start "component_telegram_web_probe_rejects_emoji_prefixed_internal_telemetry_replies"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
