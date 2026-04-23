@@ -62,12 +62,20 @@ let retriesUsed = 0;
 let chatOpenVerified = false;
 let lastChatOpenCheck = null;
 
-function normalizeMessageText(value) {
+function preserveMessageText(value) {
   return String(value || "")
+    .replace(/\r\n?/g, "\n")
     .replace(/[\u200e\u200f]/g, " ")
     .replace(/[\uE000-\uF8FF]/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/(?:\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)+$/gi, "")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/(?:\n?\s*\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)+$/gi, "")
+    .trim();
+}
+
+function normalizeMessageText(value) {
+  return preserveMessageText(value)
+    .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -111,10 +119,12 @@ function safeMid(value) {
 }
 
 function normalizeProbeMessage(message) {
+  const rawText = preserveMessageText(message?.raw_text ?? message?.text);
   return {
     mid: safeMid(message?.mid),
     direction: String(message?.direction || "unknown"),
-    text: normalizeMessageText(message?.text),
+    raw_text: rawText,
+    text: normalizeMessageText(rawText),
   };
 }
 
@@ -490,7 +500,7 @@ function successPayload({ targetValue, sentText, sentMessage, replyMessage, corr
     target: targetValue,
     sent_text: sentText,
     sent_mid: sentMessage.mid,
-    reply_text: replyMessage.text,
+    reply_text: replyMessage.raw_text || replyMessage.text,
     reply_mid: replyMessage.mid,
     checks,
     failures,
@@ -603,7 +613,7 @@ async function collectMessages(page) {
           bubble.querySelector(".translatable-message") ||
           bubble.querySelector(".bubble-content") ||
           bubble;
-        const text = (textNode.textContent || "").replace(/\s+/g, " ").trim();
+        const text = textNode.innerText || textNode.textContent || "";
         if (!text) continue;
         const midRaw = bubble.closest("[data-mid]")?.getAttribute("data-mid");
         const mid = midRaw ? Number(midRaw) : null;
@@ -827,7 +837,7 @@ async function collectSendDebugSnapshot(page, probeText, minMidExclusive = 0) {
           bubble.querySelector(".translatable-message") ||
           bubble.querySelector(".bubble-content") ||
           bubble;
-        const text = (textNode.textContent || "").replace(/\s+/g, " ").trim();
+        const text = textNode.innerText || textNode.textContent || "";
         const midRaw = bubble.closest("[data-mid]")?.getAttribute("data-mid");
         let direction = "unknown";
         if (className.includes(" is-in ")) direction = "in";

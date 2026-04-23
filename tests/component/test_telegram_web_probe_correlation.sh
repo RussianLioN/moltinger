@@ -106,6 +106,31 @@ NODE
         test_fail "Attributed reply should be the first incoming message after the sent probe"
     fi
 
+    test_start "component_telegram_web_probe_preserves_multiline_raw_reply_text"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { findAttributedReply } = await import(process.env.NODE_SCRIPT);
+const rawReply = "Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text";
+const reply = findAttributedReply([
+  { mid: 41, direction: "out", text: "/status" },
+  { mid: 42, direction: "in", text: rawReply }
+], 41);
+if (!reply) {
+  throw new Error("expected attributed reply");
+}
+if (reply.raw_text !== rawReply) {
+  throw new Error(`expected raw multiline reply to be preserved, got ${JSON.stringify(reply)}`);
+}
+if (reply.text !== "Статус: Online Канал: Telegram (@moltinger_bot) Модель: openai-codex::gpt-5.4 Провайдер: openai-codex Режим: safe-text") {
+  throw new Error(`expected normalized reply text for correlation helpers, got ${JSON.stringify(reply)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must preserve raw multiline reply text while keeping normalized text for correlation logic"
+    fi
+
     test_start "component_telegram_web_probe_waits_for_stable_final_reply_before_passing"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";
