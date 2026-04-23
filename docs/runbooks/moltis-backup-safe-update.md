@@ -31,7 +31,7 @@ Operational policy in this repository:
 - Do not replay production deploy steps manually from a feature branch after workflow branch guards block promotion.
 - Use `.github/workflows/feature-diagnostics.yml` for read-only branch evidence, then promote to `main` before production rollout.
 - Do not pin a GitHub release tag unless the matching GHCR container tag is actually published.
-- Do not keep a leading `v` in tracked GHCR tags (use `20260421.05`, not `v20260421.05`).
+- Do not keep a leading `v` in tracked GHCR tags (use `20260423.01`, not `v20260423.01`).
 - Do not pull or restart a new Moltis image without a fresh pre-update backup.
 - Do not continue rollout if restore-check fails for that fresh backup.
 - Do not treat "previous image exists" as sufficient rollback evidence by itself.
