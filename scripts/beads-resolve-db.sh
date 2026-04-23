@@ -905,10 +905,24 @@ beads_resolve_find_system_bd() {
   return 1
 }
 
+beads_resolve_bd_output_indicates_runtime_instability() {
+  local output="$1"
+
+  [[ -n "${output}" ]] || return 1
+
+  if printf '%s\n' "${output}" | grep -Eiq \
+    'server not reachable|circuit breaker is open|failed to get statistics|connect: connection refused'; then
+    return 0
+  fi
+
+  return 1
+}
+
 beads_resolve_run_system_bd_probe() {
   local repo_root="$1"
-  local capture_stderr="$2"
-  shift 2
+  local db_path="$2"
+  local capture_stderr="$3"
+  shift 3
 
   local timeout_seconds="${BEADS_RESOLVE_BD_TIMEOUT_SECONDS:-8}"
   local command_path=""
@@ -932,7 +946,11 @@ beads_resolve_run_system_bd_probe() {
 
   (
     cd "${repo_root}"
-    "${command_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+    if [[ -n "${db_path}" ]]; then
+      "${command_path}" --db "${db_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+    else
+      "${command_path}" "$@" >"${stdout_file}" 2>"${stderr_file}"
+    fi
   ) &
   command_pid=$!
 
@@ -979,23 +997,26 @@ beads_resolve_run_system_bd_probe() {
 
 beads_resolve_probe_local_runtime_health() {
   local repo_root="$1"
+  local db_path="${repo_root}/.beads/beads.db"
 
   BEADS_RESOLVE_RUNTIME_PROBE_STATE="not_run"
   BEADS_RESOLVE_LAST_BD_OUTPUT=""
   BEADS_RESOLVE_LAST_BD_RC=0
   BEADS_RESOLVE_LAST_BD_TIMED_OUT="false"
 
-  if ! beads_resolve_run_system_bd_probe "${repo_root}" true info; then
+  if ! beads_resolve_run_system_bd_probe "${repo_root}" "${db_path}" true info; then
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
     return 1
   fi
 
-  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+  if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && \
+        "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]] && \
+     ! beads_resolve_bd_output_indicates_runtime_instability "${BEADS_RESOLVE_LAST_BD_OUTPUT}"; then
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="healthy"
     return 0
   fi
 
-  if ! beads_resolve_run_system_bd_probe "${repo_root}" true status; then
+  if ! beads_resolve_run_system_bd_probe "${repo_root}" "${db_path}" true status; then
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="unavailable"
     return 1
   fi
@@ -1005,7 +1026,8 @@ beads_resolve_probe_local_runtime_health() {
     return 0
   fi
 
-  if [[ "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+  if [[ "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]] && \
+     ! beads_resolve_bd_output_indicates_runtime_instability "${BEADS_RESOLVE_LAST_BD_OUTPUT}"; then
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="healthy"
   else
     BEADS_RESOLVE_RUNTIME_PROBE_STATE="unhealthy"

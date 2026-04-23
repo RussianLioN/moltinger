@@ -261,14 +261,17 @@ phase_a_wait_for_runtime_status() {
   local delay_seconds="${WORKTREE_PHASE_A_STATUS_RETRY_DELAY_SECONDS:-1}"
   local attempt=1
   local output=""
+  local db_path="${target_path}/.beads/beads.db"
 
   while [[ "${attempt}" -le "${attempts}" ]]; do
-    if ! beads_resolve_run_system_bd_probe "${target_path}" true status; then
+    if ! beads_resolve_run_system_bd_probe "${target_path}" "${db_path}" true status; then
       phase_a_fail_runtime "system_bd_missing" "Phase A could not locate the system bd binary for final runtime readiness checks."
     fi
     output="${BEADS_RESOLVE_LAST_BD_OUTPUT}"
 
-    if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]]; then
+    if [[ "${BEADS_RESOLVE_LAST_BD_TIMED_OUT}" != "true" && \
+          "${BEADS_RESOLVE_LAST_BD_RC}" -eq 0 ]] && \
+       ! beads_resolve_bd_output_indicates_runtime_instability "${output}"; then
       return 0
     fi
 
