@@ -265,6 +265,28 @@ message_is_skill_mutation_query() {
   return 1
 }
 
+message_has_english_action_token() {
+  local normalized tokens action
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  action="${2:-}"
+  [[ -n "$normalized" && -n "$action" ]] || return 1
+
+  tokens="$(
+    printf '%s' "$normalized" \
+      | sed 's/[^[:alnum:]_.-]/ /g' \
+      | sed 's/[[:space:]]\+/ /g' \
+      | sed 's/^ //; s/ $//'
+  )"
+
+  case " ${tokens} " in
+    *" ${action} "*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 message_is_skill_update_query() {
   local normalized
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -274,7 +296,23 @@ message_is_skill_update_query() {
     return 1
   fi
 
-  if printf '%s' "$normalized" | grep -Eiq '(обнов(и|ить|ите|им|ляй|лять)|измен(и|ить|ите|им|яй|ять)|редактир(уй|овать|уйте)|перепиш(и|ите|у|ем)|patch|update|edit|rewrite).{0,40}(навык|skill)|(навык|skill).{0,24}(обнов|измени|редакт|patch|update|edit|rewrite|перепиш)'; then
+  if message_is_codex_update_scheduler_query "$normalized"; then
+    return 1
+  fi
+
+  if message_is_codex_update_context_query "$normalized"; then
+    return 1
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '((обнови([[:space:]]|$)|обновить[[:space:]]|обновите[[:space:]]|обновим[[:space:]]|обновляй[[:space:]]|измени([[:space:]]|$)|изменить[[:space:]]|измените[[:space:]]|изменим[[:space:]]|редактируй[[:space:]]|редактировать[[:space:]]|редактируйте[[:space:]]|перепиши([[:space:]]|$)|переписать[[:space:]]|перепишите[[:space:]]|патч[[:space:]]|патчить[[:space:]]).{0,40}(навык|skill))|((навык|skill).{0,24}(обнови([[:space:]]|$)|обновить[[:space:]]|обновите[[:space:]]|обновим[[:space:]]|обновляй[[:space:]]|измени([[:space:]]|$)|изменить[[:space:]]|измените[[:space:]]|изменим[[:space:]]|редактируй[[:space:]]|редактировать[[:space:]]|редактируйте[[:space:]]|перепиши([[:space:]]|$)|переписать[[:space:]]|перепишите[[:space:]]|патч[[:space:]]|патчить[[:space:]]))'; then
+    return 0
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '(навык|skill)' && \
+     { message_has_english_action_token "$normalized" "patch" || \
+       message_has_english_action_token "$normalized" "update" || \
+       message_has_english_action_token "$normalized" "edit" || \
+       message_has_english_action_token "$normalized" "rewrite"; }; then
     return 0
   fi
 
@@ -326,6 +364,10 @@ message_is_skill_visibility_query() {
   [[ -n "$normalized" ]] || return 1
 
   if skill_mutation_intent_for_message "$normalized" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if message_is_codex_update_context_query "$normalized"; then
     return 1
   fi
 
@@ -708,6 +750,30 @@ message_is_codex_update_scheduler_query() {
   return 1
 }
 
+message_is_codex_update_context_query() {
+  local normalized has_subject=false
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if message_is_codex_update_query "$normalized"; then
+    has_subject=true
+  fi
+
+  if [[ "$has_subject" != true ]] && printf '%s' "$normalized" | grep -Eiq '(навык|skill).{0,40}codex-update|codex-update.{0,40}(навык|skill)'; then
+    has_subject=true
+  fi
+
+  if [[ "$has_subject" != true ]]; then
+    return 1
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '((почему|зачем).{0,80}(раньше|ранее|до этого))|((три|несколько).{0,20}(раза|раз|подряд))|(дубл(ь|и|ями|ируются|ировались)?|повтор(но|ные|ял(ось|ись)?|яется|ялись)?)|(что[[:space:]]+(изменилось|поменялось))|(после[[:space:]]+исправлен)|((схема|логика).{0,40}работы)|((как|каким образом).{0,40}(сейчас[[:space:]]+)?работа(ет|ешь|ют|ет сейчас))|((как|каким образом).{0,40}(устроен|устроена))'; then
+    return 0
+  fi
+
+  return 1
+}
+
 reply_has_codex_update_false_negative() {
   local normalized
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -792,6 +858,42 @@ reply_has_codex_update_scheduler_memory_false_negative() {
   fi
 
   return 1
+}
+
+reply_matches_codex_update_scheduler_contract() {
+  local normalized has_scheduler_scope=false has_runtime_boundary=false
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if printf '%s' "$normalized" | grep -Eiq '(scheduler path|регулярн(ой|ую|ые)? проверк|крон(а|у|ом)?|cron|последняя проверка была|live cron)'; then
+    has_scheduler_scope=true
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '(не подтверждаю по памяти|не доказывает, что live cron сейчас|подтверждено быть не может без runtime check|нужен( отдельный)? операторск(ий|ого)/runtime check|нужен runtime check|для точного статуса нужен операторский/runtime check|без runtime check|не могу подтвердить без runtime check)'; then
+    has_runtime_boundary=true
+  fi
+
+  [[ "$has_scheduler_scope" == true && "$has_runtime_boundary" == true ]]
+}
+
+reply_matches_codex_update_context_contract() {
+  local normalized has_history=false has_scheme=false has_dedup=false
+  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ -n "$normalized" ]] || return 1
+
+  if printf '%s' "$normalized" | grep -Eiq '(раньше повторн|раньше.*сообщени|после исправлен|дефект.*дедуп|дедупликац|три раза|дубли|повторн(ые|о))'; then
+    has_history=true
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '(каждые 6 часов|scheduler path|официальн(ый|ого)? upstream|проверяет официальный upstream|upstream latest)'; then
+    has_scheme=true
+  fi
+
+  if printf '%s' "$normalized" | grep -Eiq '(last_alert_fingerprint|last_seen_version|last_seen_fingerprint|last_run_at|suppressed|одно сообщение|не шл[её]т дубль)'; then
+    has_dedup=true
+  fi
+
+  [[ "$has_history" == true && "$has_scheme" == true && "$has_dedup" == true ]]
 }
 
 write_report() {
@@ -919,6 +1021,32 @@ evaluate_authoritative_semantics() {
       --argjson base "$DIAGNOSTIC_JSON" \
       '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_scheduler_memory_false_negative"}}')"
     RECOMMENDED_ACTION="Reconcile codex-update scheduler questions so Telegram answers from the remote-safe scheduler contract instead of drifting into memory/schedule speculation, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_scheduler_query "$normalized_message" && ! reply_matches_codex_update_scheduler_contract "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_scheduler_contract_mismatch" "$RUN_STAGE" "Authoritative Codex update scheduler reply did not match the remote-safe scheduler contract" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_scheduler_contract_mismatch"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update scheduler questions so Telegram returns the dedicated scheduler contract reply instead of generic skill-detail or unrelated wording, then rerun authoritative UAT."
+    return 0
+  fi
+
+  if message_is_codex_update_context_query "$normalized_message" && ! reply_matches_codex_update_context_contract "$reply_text"; then
+    VERDICT="failed"
+    RUN_STAGE="semantic_review"
+    FAILURE_JSON="$(build_failure_json "semantic_codex_update_context_contract_mismatch" "$RUN_STAGE" "Authoritative Codex update context/history reply did not match the deterministic current-scheme contract" "operator" true)"
+    DIAGNOSTIC_JSON="$(jq -cn \
+      --arg reply_text "$reply_text" \
+      --arg message "$normalized_message" \
+      --argjson base "$DIAGNOSTIC_JSON" \
+      '$base + {semantic_review:{message:$message, observed_reply:$reply_text, failure:"semantic_codex_update_context_contract_mismatch"}}')"
+    RECOMMENDED_ACTION="Reconcile codex-update history/scheme questions so Telegram returns the dedicated context contract instead of generic skill-detail, release summary, or mutation wording, then rerun authoritative UAT."
     return 0
   fi
 
