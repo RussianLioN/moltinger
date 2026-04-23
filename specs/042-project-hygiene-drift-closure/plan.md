@@ -9,11 +9,11 @@
 
 ## Technical Context
 
-**Language/Version**: Markdown, shell checks  
-**Primary Dependencies**: `SESSION_SUMMARY.md`, `specs/*`, active docs/rules  
-**Testing**: doc/spec consistency review, targeted static checks where available  
-**Target Platform**: repository planning and operator docs  
-**Constraints**: не переписывать incident history; менять только active/current-authority surfaces  
+**Language/Version**: Markdown, shell checks
+**Primary Dependencies**: `SESSION_SUMMARY.md`, `specs/*`, active docs/rules
+**Testing**: doc/spec consistency review, targeted static checks where available
+**Target Platform**: repository planning and operator docs
+**Constraints**: не переписывать incident history; менять только active/current-authority surfaces
 **Scale/Scope**: planning hygiene, session summary, spec classification
 
 ## Constitution Check

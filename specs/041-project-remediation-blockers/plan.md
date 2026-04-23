@@ -9,14 +9,14 @@
 
 ## Technical Context
 
-**Language/Version**: Bash, TOML, YAML, Markdown  
-**Primary Dependencies**: `scripts/preflight-check.sh`, `scripts/telegram-safe-llm-guard.sh`, `config/moltis.toml`, `.github/workflows/*`, `tests/*`  
-**Storage**: repo files + runtime/deploy config  
-**Testing**: shell unit/component/static suites, preflight JSON, live/provider smoke where safe  
-**Target Platform**: macOS dev shell, Linux CI/production container  
-**Project Type**: shared runtime/deploy/test contracts  
-**Performance Goals**: deterministic Telegram-safe delivery; no false-negative config parsing; no noisy legacy provider drift  
-**Constraints**: не ломать explicit skill CRUD flow, не переписывать исторические RCA как будто они current config, не внедрять unproven provider aliasing  
+**Language/Version**: Bash, TOML, YAML, Markdown
+**Primary Dependencies**: `scripts/preflight-check.sh`, `scripts/telegram-safe-llm-guard.sh`, `config/moltis.toml`, `.github/workflows/*`, `tests/*`
+**Storage**: repo files + runtime/deploy config
+**Testing**: shell unit/component/static suites, preflight JSON, live/provider smoke where safe
+**Target Platform**: macOS dev shell, Linux CI/production container
+**Project Type**: shared runtime/deploy/test contracts
+**Performance Goals**: deterministic Telegram-safe delivery; no false-negative config parsing; no noisy legacy provider drift
+**Constraints**: не ломать explicit skill CRUD flow, не переписывать исторические RCA как будто они current config, не внедрять unproven provider aliasing
 **Scale/Scope**: runtime guard, config, tests, workflows, active deploy surface
 
 ## Constitution Check

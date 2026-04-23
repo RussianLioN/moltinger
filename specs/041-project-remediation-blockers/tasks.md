@@ -1,6 +1,6 @@
 # Tasks: Project Remediation Blockers
 
-**Input**: Design documents from `/specs/041-project-remediation-blockers/`  
+**Input**: Design documents from `/specs/041-project-remediation-blockers/`
 **Prerequisites**: `spec.md`, `plan.md`
 
 ## Phase 0: Baseline

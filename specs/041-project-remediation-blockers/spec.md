@@ -1,8 +1,8 @@
 # Feature Specification: Project Remediation Blockers
 
-**Feature Branch**: `[fix/project-remediation-blockers]`  
-**Created**: 2026-04-21  
-**Status**: Draft  
+**Feature Branch**: `[fix/project-remediation-blockers]`
+**Created**: 2026-04-21
+**Status**: Draft
 **Input**: User description: "Сделай полное ревью проекта и запланируй speckit совместимые шаги по исправлению всех ошибок и реализуй их. В затруднительных случаях собирай консилиум релевантных экспертов для анализа и принятия решения по ситуации"
 
 ## User Scenarios & Testing *(mandatory)*

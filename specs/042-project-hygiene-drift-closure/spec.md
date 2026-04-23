@@ -1,8 +1,8 @@
 # Feature Specification: Project Hygiene Drift Closure
 
-**Feature Branch**: `[fix/project-remediation-blockers]`  
-**Created**: 2026-04-21  
-**Status**: Draft  
+**Feature Branch**: `[fix/project-remediation-blockers]`
+**Created**: 2026-04-21
+**Status**: Draft
 **Input**: User description: "Сделай полное ревью проекта и запланируй speckit совместимые шаги по исправлению всех ошибок и реализуй их"
 
 ## User Scenarios & Testing *(mandatory)*

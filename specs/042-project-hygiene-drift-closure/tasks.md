@@ -1,6 +1,6 @@
 # Tasks: Project Hygiene Drift Closure
 
-**Input**: Design documents from `/specs/042-project-hygiene-drift-closure/`  
+**Input**: Design documents from `/specs/042-project-hygiene-drift-closure/`
 **Prerequisites**: `spec.md`, `plan.md`
 
 ## Phase 0: Inventory
