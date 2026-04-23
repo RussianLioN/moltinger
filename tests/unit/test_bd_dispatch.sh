@@ -61,6 +61,9 @@ if [[ "${args[0]:-}" == "info" ]]; then
     printf 'Error: failed to open database: simulated broken named db\n' >&2
     exit 1
   fi
+  if [[ -n "${db_path}" && -e ".beads/dolt/beads/.fake-warning" ]]; then
+    printf 'Warning: could not flush working set before stop: flush: server not reachable: dial tcp 127.0.0.1:53608: connect: connection refused\n' >&2
+  fi
   if [[ -n "${db_path}" ]]; then
     mkdir -p "$(dirname "${db_path}")"
     if [[ -d "${db_path}" ]]; then
@@ -79,6 +82,9 @@ if [[ "${args[0]:-}" == "status" ]]; then
   if [[ -e ".beads/dolt/beads/.fake-broken" ]]; then
     printf 'Error: failed to open database: failed to initialize schema: failed to run dolt migrations: dolt migration "uuid_primary_keys" failed: migrate events to UUID PK: check column type: Error 1105 (HY000): no root value found in session\n' >&2
     exit 1
+  fi
+  if [[ -n "${db_path}" && -e ".beads/dolt/beads/.fake-warning" ]]; then
+    printf 'Warning: could not flush working set before stop: flush: server not reachable: dial tcp 127.0.0.1:53608: connect: connection refused\n' >&2
   fi
   printf 'STATUS_OK\n'
   exit 0
@@ -228,6 +234,21 @@ EOF
 EOF
     : > "${worktree_dir}/.beads/metadata.json"
     : > "${worktree_dir}/.beads/dolt/beads/.fake-broken"
+}
+
+seed_warning_named_runtime_foundation() {
+    local worktree_dir="$1"
+
+    mkdir -p "${worktree_dir}/.beads/dolt/beads/.dolt"
+    cat > "${worktree_dir}/.beads/config.yaml" <<'EOF'
+issue-prefix: "demo"
+auto-start-daemon: false
+EOF
+    cat > "${worktree_dir}/.beads/issues.jsonl" <<'EOF'
+{"id":"demo-1","title":"seed","status":"open","type":"task","priority":3}
+EOF
+    : > "${worktree_dir}/.beads/metadata.json"
+    : > "${worktree_dir}/.beads/dolt/beads/.fake-warning"
 }
 
 run_plain_bd() {
@@ -1110,6 +1131,62 @@ test_localize_rebuilds_unhealthy_named_runtime_in_place() {
     test_pass
 }
 
+test_plain_bd_blocks_runtime_warning_with_localize_guidance() {
+    test_start "plain_bd_blocks_runtime_warning_with_localize_guidance"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-warning-runtime"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/warning-runtime" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_warning_named_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_plain_bd "${worktree_path}" "${fake_bin}" status 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "25" "${rc}" "Runtime warnings that point to an unreachable server must fail closed"
+    assert_contains "${output}" "plain bd cannot read it safely yet" "Dispatch must treat unstable runtime warnings as unhealthy"
+    assert_contains "${output}" "beads-worktree-localize.sh --path" "Dispatch must keep routing unstable runtimes through localized rebuild"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
+test_localize_reports_runtime_bootstrap_required_for_runtime_warning() {
+    test_start "localize_reports_runtime_bootstrap_required_for_runtime_warning"
+
+    local fixture_root repo_dir worktree_path fake_bin output rc
+    fixture_root="$(mktemp -d /tmp/bd-dispatch-unit.XXXXXX)"
+    repo_dir="$(git_topology_fixture_create_named_repo "${fixture_root}" "moltinger")"
+    seed_repo_local_bd_tools "${repo_dir}"
+    worktree_path="${fixture_root}/moltinger-warning-runtime-check"
+    git_topology_fixture_add_worktree_branch_from "${repo_dir}" "${worktree_path}" "feat/warning-runtime-check" "main"
+    worktree_path="$(canonicalize_path "${worktree_path}")"
+    seed_warning_named_runtime_foundation "${worktree_path}"
+    fake_bin="$(create_fake_system_bd_bin "${fixture_root}")"
+
+    output="$(
+        set +e
+        run_localize "${worktree_path}" "${fake_bin}" --check --format env --path "${worktree_path}" 2>&1
+        printf '\n__RC__=%s\n' "$?"
+    )"
+    rc="$(printf '%s\n' "${output}" | awk -F= '/__RC__/ {print $2}' | tail -1)"
+
+    assert_eq "23" "${rc}" "Localization helper must stop and report when runtime warnings reveal an unstable named DB"
+    assert_contains "${output}" "state=runtime_bootstrap_required" "Localization check must not report current when runtime emits unreachable-server warnings"
+    assert_contains "${output}" "runtime_repair_mode=rebuild_local_foundation" "Localization check must steer unstable named DBs into local rebuild flow"
+
+    rm -rf "${fixture_root}"
+    test_pass
+}
+
 run_all_tests() {
     start_timer
 
@@ -1151,6 +1228,8 @@ run_all_tests() {
     test_localize_repairs_stale_dolt_shell_by_rebuilding_local_runtime
     test_plain_bd_blocks_unhealthy_named_runtime_with_localize_guidance
     test_localize_rebuilds_unhealthy_named_runtime_in_place
+    test_plain_bd_blocks_runtime_warning_with_localize_guidance
+    test_localize_reports_runtime_bootstrap_required_for_runtime_warning
     generate_report
 }
 
