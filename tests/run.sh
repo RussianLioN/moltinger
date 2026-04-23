@@ -198,6 +198,7 @@ suite_entries_for_lane() {
                 "bash|component_moltis_codex_update_profile|Moltis Codex update profile component|$SCRIPT_DIR/component/test_moltis_codex_update_profile.sh" \
                 "bash|component_moltis_codex_update_e2e|Moltis Codex update E2E component|$SCRIPT_DIR/component/test_moltis_codex_update_e2e.sh" \
                 "bash|component_telegram_bot_send_remote|Telegram remote send component|$SCRIPT_DIR/component/test_telegram_bot_send_remote.sh" \
+                "bash|component_telegram_safe_llm_guard|Telegram safe LLM guard component|$SCRIPT_DIR/component/test_telegram_safe_llm_guard.sh" \
                 "bash|component_telegram_web_probe_correlation|Telegram Web probe correlation|$SCRIPT_DIR/component/test_telegram_web_probe_correlation.sh" \
                 "bash|component_telegram_web_user_monitor_debug|Telegram Web monitor debug flag|$SCRIPT_DIR/component/test_telegram_web_user_monitor_debug.sh" \
                 "bash|component_telegram_remote_uat_contract|Telegram remote UAT contract|$SCRIPT_DIR/component/test_telegram_remote_uat_contract.sh"

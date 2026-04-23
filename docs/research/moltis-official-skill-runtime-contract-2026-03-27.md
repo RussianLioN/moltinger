@@ -16,7 +16,8 @@
 
 - `https://docs.moltis.org/skill-tools.html`
   - `create_skill` пишет новый `SKILL.md` в `<data_dir>/skills/<name>/`.
-  - `update_skill` и `delete_skill` работают с тем же personal skill path.
+  - `update_skill`, `patch_skill` и `delete_skill` работают с тем же personal skill path.
+  - `write_skill_files` доступен при включённом `enable_agent_sidecar_files`.
 
 - `https://docs.moltis.org/configuration.html`
   - документирует `[skills] enabled`, `auto_load` и `enable_agent_sidecar_files`;

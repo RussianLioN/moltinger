@@ -686,6 +686,17 @@ json_string_field_present_and_nonempty_from_text() {
     string_has_nonwhitespace "$value"
 }
 
+json_array_field_has_object_entries_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+
+    [[ -n "$source_text" && -n "$key" ]] || return 1
+
+    printf '%s' "$source_text" \
+        | tr '\r\n' '  ' \
+        | grep -Eiq "\"${key}\"[[:space:]]*:[[:space:]]*\\[[[:space:]]*\\{"
+}
+
 json_escape() {
     printf '%s' "$1" | awk '
         BEGIN {
@@ -1881,7 +1892,7 @@ build_skill_runtime_snapshot_message() {
 Telegram-safe skill runtime note:
 - Для текущего хода не доказывай отсутствие навыков через exec/find/cat по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills, mounted workspace или repo paths.
 - Если нужен ответ про навыки, опирайся на runtime-discovered skills и на best-effort snapshot ниже. Если snapshot недоступен, честно скажи, что hook не подтверждает список, но это не означает отсутствия навыков.
-- Для create/update/delete навыков предпочитай dedicated tools create_skill, update_skill, delete_skill.
+- Для create/update/patch/delete навыков предпочитай dedicated tools create_skill, update_skill, patch_skill, delete_skill, write_skill_files.
 - Канонический scaffold: skills/<name>/SKILL.md.
 - Best-effort runtime snapshot:
 ${bullets}
@@ -1891,10 +1902,10 @@ EOF
 build_skill_authoring_guard_message() {
     cat <<'EOF'
 Telegram-safe skill-authoring contract:
-- Для skill visibility/create/update/delete не используй browser, web-search, Tavily, exec и filesystem-пробы как primary path.
-- Допустимые tool paths для такого хода: create_skill, update_skill, delete_skill, session_state, send_message, send_image.
+- Для skill visibility/create/update/patch/delete не используй browser, web-search, Tavily, exec и filesystem-пробы как primary path.
+- Допустимые tool paths для такого хода: create_skill, update_skill, patch_skill, delete_skill, write_skill_files, session_state, send_message, send_image.
 - Если runtime snapshot недоступен, не делай вывод "навыков нет"; скажи, что sandbox filesystem не является доказательством отсутствия навыка.
-- Если create_skill или update_skill вернул validation/frontmatter error, кратко объясни ошибку и повтори попытку с валидным SKILL.md.
+- Если create_skill, update_skill, patch_skill или write_skill_files вернул validation/frontmatter error, кратко объясни ошибку и повтори попытку с валидным SKILL.md.
 - Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold из project docs, а не ищи его через workspace, skills directory или existing skills.
 EOF
 }
@@ -1945,7 +1956,8 @@ Telegram-safe sparse create-skill override:
   - TODO: добавить конкретные шаблоны под сценарий навыка.
 - Если create_skill вернул validation/frontmatter error, сразу повтори попытку с этим каноническим scaffold.
 - Если create_skill сообщил, что имя уже занято, кратко скажи об этом и предлагай update/overwrite только по явной команде пользователя.
-- После успешного create_skill ответь коротко, что создан базовый шаблон навыка и его можно доработать следующим сообщением.
+- После успешного create_skill можешь при необходимости в этом же ходе продолжить через update_skill, patch_skill и write_skill_files.
+- Пользователю верни один короткий итог только после завершения всей native CRUD цепочки и не показывай внутренние tool-логи.
 EOF
 }
 
@@ -1960,7 +1972,7 @@ Telegram-safe runtime note for skills:
 ${bullets}
 
 Filesystem-пробы по ~/.moltis/skills, /home/moltis/.moltis/skills, /server/skills и mounted workspace не считаются доказательством наличия или отсутствия навыка.
-Для skill visibility отвечай осторожно по runtime context, а для create/update/delete используй dedicated tools create_skill, update_skill, delete_skill.
+Для skill visibility отвечай осторожно по runtime context, а для create/update/patch/delete используй dedicated tools create_skill, update_skill, patch_skill, delete_skill, write_skill_files.
 Канонический scaffold: skills/<name>/SKILL.md.
 EOF
 }
@@ -1968,12 +1980,23 @@ EOF
 build_disallowed_tool_runtime_note() {
     local tool_name="${1:-unknown-tool}"
 
+    if current_turn_requires_native_skill_tools_only; then
+        cat <<EOF
+Telegram-safe runtime note:
+- Tool \`${tool_name}\` blocked for the user-facing Telegram skill-CRUD lane.
+- Allow only dedicated skill tools: create_skill, update_skill, patch_skill, delete_skill, write_skill_files, plus session_state/send_message/send_image.
+- Do not call Tavily, browser, arbitrary MCP/web-search, process, cron, or filesystem probes here.
+- Continue text-only, or use only native skill tools for this turn.
+EOF
+        return 0
+    fi
+
     cat <<EOF
 Telegram-safe runtime note:
 - Tool \`${tool_name}\` blocked for the user-facing Telegram lane.
 - Allow only dedicated skill tools and allowlisted Tavily research MCP tools here.
 - Do not call browser, arbitrary MCP/web-search, process, cron, or filesystem probes here.
-- Continue text-only, or use only safe tools: create_skill, update_skill, delete_skill, session_state, send_message, send_image, mcp__tavily__tavily_search, mcp__tavily__tavily_extract, mcp__tavily__tavily_map, mcp__tavily__tavily_crawl, mcp__tavily__tavily_research.
+- Continue text-only, or use only safe tools: create_skill, update_skill, patch_skill, delete_skill, write_skill_files, session_state, send_message, send_image, mcp__tavily__tavily_search, mcp__tavily__tavily_extract, mcp__tavily__tavily_map, mcp__tavily__tavily_crawl, mcp__tavily__tavily_research.
 EOF
 }
 
@@ -2041,21 +2064,21 @@ build_skill_maintenance_reply_text() {
     local skill_name="${2:-}"
 
     if [[ "$target_kind" == "codex_update" ]]; then
-        printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю `codex-update` через внутренние инструменты, логи и чтение файлов. Для простой правки навыка дай явную команду create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+        printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю `codex-update` через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
         return 0
     fi
 
     if [[ "$target_kind" == "generic" ]]; then
-        printf '%s' 'В Telegram-safe режиме я не провожу repair/debug/log inspection через внутренние инструменты, логи и чтение файлов. Если нужна простая правка навыка, дай явную команду create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+        printf '%s' 'В Telegram-safe режиме я не провожу repair/debug/log inspection через внутренние инструменты, логи и чтение файлов. Если нужна простая правка навыка, дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
         return 0
     fi
 
     if [[ -n "$skill_name" && "$skill_name" != "generic" ]]; then
-        printf 'В Telegram-safe режиме я не чиню и не отлаживаю навык `%s` через внутренние инструменты, логи и чтение файлов. Для простой правки скажи явно create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.' "$skill_name"
+        printf 'В Telegram-safe режиме я не чиню и не отлаживаю навык `%s` через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.' "$skill_name"
         return 0
     fi
 
-    printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю навыки через внутренние инструменты, логи и чтение файлов. Для простой правки скажи явно create_skill/update_skill/delete_skill, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
+    printf '%s' 'В Telegram-safe режиме я не чиню и не отлаживаю навыки через внутренние инструменты, логи и чтение файлов. Для простой правки дай явную CRUD-команду на создание, обновление, патч или удаление навыка, а для диагностики и runtime-проверки продолжим в web UI/операторской сессии.'
 }
 
 build_skill_maintenance_hard_override_message() {
@@ -3138,7 +3161,7 @@ clean_delivery_text_is_safe_for_direct_send() {
         return 1
     fi
 
-    if printf '%s' "$text" | grep -Eiq '^(сейчас|сначала|сперва|для начала|первым делом|let me|i( ?|'"'"')ll|checking|opening|looking up|проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)\b|пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|начну с (поиска|анализа|изучения|просмотра)|create_skill\b|update_skill\b|delete_skill\b|session_state\b|send_message\b|send_image\b|tavily\b'; then
+    if printf '%s' "$text" | grep -Eiq '^(сейчас|сначала|сперва|для начала|первым делом|let me|i( ?|'"'"')ll|checking|opening|looking up|проверю|посмотрю|открою|изучу|поищу|быстро посмотрю)\b|пользователь просит|the user (is )?asking|у меня есть доступ к|i have access to|мне доступны|сначала найду|для начала найду|начну с (поиска|анализа|изучения|просмотра)|create_skill\b|update_skill\b|patch_skill\b|delete_skill\b|write_skill_files\b|session_state\b|send_message\b|send_image\b|tavily\b'; then
         return 1
     fi
 
@@ -3269,6 +3292,23 @@ tool_call_has_missing_required_arguments() {
         cron)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "action"
             ;;
+        create_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        update_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        patch_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "instructions"
+            ;;
+        delete_skill)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
+            ;;
+        write_skill_files)
+            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
+            ! json_array_field_has_object_entries_from_text "$arguments_json" "files"
+            ;;
         *)
             return 1
             ;;
@@ -3285,9 +3325,27 @@ extract_tool_call_names() {
         | sed -E 's/^.*"name"[[:space:]]*:[[:space:]]*"//; s/"$//'
 }
 
+current_turn_requires_native_skill_tools_only() {
+    if [[ "${current_turn_skill_visibility_request:-false}" == true || "${current_turn_skill_template_request:-false}" == true || "${current_turn_skill_detail_request:-false}" == true || "${current_turn_skill_apply_request:-false}" == true || "${current_turn_skill_maintenance_request:-false}" == true || "${current_turn_codex_update_maintenance_request:-false}" == true || "${current_turn_generic_maintenance_request:-false}" == true ]]; then
+        return 1
+    fi
+
+    if [[ "${current_turn_skill_mutation_request:-false}" == true || "${looks_like_sparse_skill_create_request:-false}" == true || "${persisted_skill_native_crud_request:-false}" == true || "${persisted_turn_intent:-}" == "skill_native_crud" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 tool_name_is_allowlisted() {
     local tool_name="${1:-}"
-    if tool_name_is_skill_allowlisted "$tool_name" || tool_name_is_tavily_allowlisted "$tool_name"; then
+    if tool_name_is_skill_allowlisted "$tool_name"; then
+        return 0
+    fi
+    if current_turn_requires_native_skill_tools_only; then
+        return 1
+    fi
+    if tool_name_is_tavily_allowlisted "$tool_name"; then
         return 0
     fi
     return 1
@@ -3296,7 +3354,7 @@ tool_name_is_allowlisted() {
 tool_name_is_skill_allowlisted() {
     local tool_name="${1:-}"
     case "$tool_name" in
-        create_skill|update_skill|delete_skill|session_state|send_message|send_image)
+        create_skill|update_skill|patch_skill|delete_skill|write_skill_files|session_state|send_message|send_image)
             return 0
             ;;
         *)
@@ -3381,6 +3439,10 @@ tool_calls_only_tavily_allowlisted() {
     local tool_calls_json="${1:-}"
     local saw_name=false
     local tool_name=""
+
+    if current_turn_requires_native_skill_tools_only; then
+        return 1
+    fi
 
     while IFS= read -r tool_name; do
         [[ -n "$tool_name" ]] || continue
@@ -3635,7 +3697,7 @@ fi
 
 has_after_llm_tool_intent=false
 if [[ "$event" == "AfterLLMCall" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(workspace|документац|файл|темплейт|template)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|documentation search tool"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "no remote nodes available|let me (check|search|inspect|look|study|read|try|get)|i( ?|')ll (check|search|inspect|look|study|read|try|get)|сейчас (проверю|поищу|изучу|посмотрю)|проверю через|посмотрю через|открою (документац|docs|сайт)|перейду на |наш[её]л.{0,120}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|наш[её]л.{0,120}(репозитор|github)|((отлично|супер|окей|ладно)[!,.[:space:]]{0,12})?давай(те)? (изучу|разберу|посмотрю|проверю|почитаю|получу|найду|открою|проанализирую|сделаю)|хорошо,? (изучу|проверю|посмотрю|почитаю).{0,120}(документац|docs|documentation|manual|guide|инструкц)|[Хх]орошо[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Оо]тлично[^[:cntrl:]]{0,80}[Дд]авай(те)?[[:space:]]+изучу|[Дд]авай(те)?[[:space:]]+изучу.{0,160}(официальн.{0,60})?(документац|docs|documentation|manual|guide|инструкц)|начну с (поиска|анализа|изучения|просмотра)|[Нн]ачина(ю|ем)[:[:space:]]|получ(у|им|ить).{0,120}(документац|docs|documentation|manual|guide|инструкц)|изучу.{0,80}(полностью|целиком|всю|весь|дальше)|попробую.{0,120}(найти|посмотреть|прочитать|изучить).{0,120}(workspace|документац|файл|темплейт|template)|(поищу|ищу).{0,80}(темплейт|template|шаблон)|([Нн]айду|найду).{0,80}(темплейт|template|шаблон)|([Сс]мотрю|[Пп]роверяю).{0,80}(директори(ю|и)[[:space:]]+skills|skills[[:space:]]+directory)|mounted workspace|workspace that's mounted|read the skill files|look at the existing skills|find the skills|create_skill tool|update_skill tool|patch_skill tool|write_skill_files tool|documentation search tool"; then
     has_after_llm_tool_intent=true
 fi
 
@@ -3645,7 +3707,7 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
     has_user_visible_internal_planning=true
 fi
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]] && \
-   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(у меня есть доступ к|i have access to|мне доступны).{0,160}((^|[^[:alnum:]_])(create_skill|update_skill|delete_skill|browser|exec|process|cron)([^[:alnum:]_]|$)|tavily|mcp__)"; then
+   printf '%s' "${response_text_flat:-$payload_flat}" | grep -Eiq "(у меня есть доступ к|i have access to|мне доступны).{0,160}((^|[^[:alnum:]_])(create_skill|update_skill|patch_skill|delete_skill|write_skill_files|browser|exec|process|cron)([^[:alnum:]_]|$)|tavily|mcp__)"; then
     has_user_visible_internal_planning=true
 fi
 
@@ -3682,15 +3744,20 @@ if text_looks_like_maintenance_request "$intent_text_flat"; then
     maintenance_request_detected=true
 fi
 
+current_turn_skill_mutation_request=false
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
+    current_turn_skill_mutation_request=true
+fi
+
 looks_like_skill_turn=false
-if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|delete)[ _-]?skill)'; then
+if printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|create|update|patch|delete|edit|rewrite|remove|write_skill_files).{0,120}(навык|skills?|skill))|((какие|что).{0,80}(навык(и|ов)?|skills?))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))|((create|update|patch|delete|edit|rewrite|remove|write_skill_files)[ _-]?skill)'; then
     looks_like_skill_turn=true
 fi
 
 current_turn_skill_template_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '(темплейт|template|шаблон)'; then
     if [[ "$looks_like_skill_turn" == true ]] || \
-       printf '%s' "$latest_assistant_message_flat" | grep -Eiq '(навык|skills?|skill|темплейт|template|шаблон|create_skill|update_skill|delete_skill)' || \
+       printf '%s' "$latest_assistant_message_flat" | grep -Eiq '(навык|skills?|skill|темплейт|template|шаблон|create_skill|update_skill|patch_skill|delete_skill|write_skill_files)' || \
        printf '%s' "$latest_system_message_flat" | grep -Eiq '<available_skills>|канонический минимальный scaffold'; then
         current_turn_skill_template_request=true
     fi
@@ -3712,7 +3779,7 @@ fi
 
 current_turn_skill_visibility_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((какие|что|что у тебя с|покажи|перечисли|list|show|which|what).{0,80}(навык(и|ов)?|skills?))|((навык(и|ов)?|skills?).{0,80}(какие|что|list|show|which|what))'; then
-    if ! printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|удали(ть|м)?|create|update|delete|build|make).{0,120}(навык|skills?|skill))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))'; then
+    if ! printf '%s' "$intent_text_flat" | grep -Eiq '((созда(й|дим|ть)|добав(ь|им|ить)|обнов(и|им|ить)|измени(ть|м)|исправ(ь|ить)|патч(ь|ить)|удали(ть|м)?|create|update|patch|delete|rewrite|fix|build|make).{0,120}(навык|skills?|skill))|((темплейт|template|шаблон).{0,120}(навык|skills?|skill))'; then
         current_turn_skill_visibility_request=true
     fi
 fi
@@ -3751,7 +3818,8 @@ fi
 
 current_turn_skill_detail_request=false
 if printf '%s' "$intent_text_flat" | grep -Eiq '((расскажи|опиши|объясни|что делает|что это|как работает|tell me about|describe|explain|what does).{0,120}(навык|skills?|skill))|((навык|skills?|skill).{0,120}(расскажи|опиши|объясни|что делает|что это|как работает|about|describe|explain|what does))'; then
-    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]] && \
+       ! printf '%s' "$intent_text_flat" | grep -Eiq '((обнов(и|им|ить)|измени(ть|м)|исправ(ь|ить)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|update|patch|delete|rewrite|fix|edit|remove).{0,120}(навык|skills?|skill))|((update|patch|delete|rewrite|fix|edit|remove)[ _-]?skill)'; then
         current_turn_skill_detail_request=true
         looks_like_skill_turn=true
     fi
@@ -3829,14 +3897,21 @@ requested_skill_name_re=""
 if [[ -n "$requested_skill_name" ]]; then
     requested_skill_name_re="$(printf '%s' "$requested_skill_name" | sed 's/[][(){}.^$?+*|\\/]/\\&/g')"
 fi
+legacy_skill_create_intent=false
 persisted_skill_create_state=""
 persisted_skill_create_name=""
 if [[ "$persisted_turn_intent" =~ ^skill_create_([a-z]+):([A-Za-z0-9._-]+)$ ]]; then
     persisted_skill_create_state="${BASH_REMATCH[1]}"
     persisted_skill_create_name="${BASH_REMATCH[2]}"
+    legacy_skill_create_intent=true
 fi
-if [[ -z "$requested_skill_name" && -n "$persisted_skill_create_name" ]]; then
-    requested_skill_name="$persisted_skill_create_name"
+if [[ "$legacy_skill_create_intent" == true ]]; then
+    write_audit_line "intent_clear reason=retire_legacy_skill_create_intent skill=${persisted_skill_create_name:-missing} state=${persisted_skill_create_state:-missing}"
+    clear_turn_intent "${turn_session_key:-}"
+    persisted_turn_intent=""
+    persisted_turn_fingerprint=""
+    persisted_skill_create_state=""
+    persisted_skill_create_name=""
 fi
 persisted_skill_detail_name=""
 if [[ "$persisted_turn_intent" =~ ^skill_detail:([A-Za-z0-9._-]+)$ ]]; then
@@ -3850,6 +3925,7 @@ persisted_codex_update_request=false
 persisted_codex_update_scheduler_request=false
 persisted_codex_update_maintenance_request=false
 persisted_generic_maintenance_request=false
+persisted_skill_native_crud_request=false
 case "${persisted_turn_intent:-}" in
     codex_update)
         persisted_codex_update_request=true
@@ -3863,6 +3939,9 @@ case "${persisted_turn_intent:-}" in
         ;;
     maintenance_generic)
         persisted_generic_maintenance_request=true
+        ;;
+    skill_native_crud)
+        persisted_skill_native_crud_request=true
         ;;
 esac
 if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
@@ -3886,10 +3965,10 @@ current_turn_generic_maintenance_request=false
 if [[ "$maintenance_request_detected" == true ]]; then
     if [[ "$codex_update_subject_request" == true ]]; then
         current_turn_codex_update_maintenance_request=true
-    elif [[ "$skill_subject_request" == true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+    elif [[ "$skill_subject_request" == true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_mutation_request" != true ]]; then
         current_turn_skill_maintenance_request=true
         looks_like_skill_turn=true
-    elif [[ "$looks_like_status" != true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true ]]; then
+    elif [[ "$looks_like_status" != true && "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_mutation_request" != true ]]; then
         current_turn_generic_maintenance_request=true
     fi
 fi
@@ -3898,7 +3977,8 @@ if [[ "$current_turn_skill_maintenance_request" == true || "$current_turn_codex_
     current_turn_codex_update_scheduler_request=false
 fi
 if [[ "$current_turn_skill_detail_request" != true && "$looks_like_skill_turn" != true && -n "$requested_skill_reference_name" ]]; then
-    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_maintenance_request" != true && "$current_turn_generic_maintenance_request" != true ]]; then
+    if [[ "$current_turn_skill_visibility_request" != true && "$current_turn_skill_template_request" != true && "$current_turn_sparse_skill_create_request" != true && "$current_turn_skill_apply_request" != true && "$current_turn_skill_maintenance_request" != true && "$current_turn_generic_maintenance_request" != true ]] && \
+       ! printf '%s' "$intent_text_flat" | grep -Eiq '((обнов(и|им|ить)|измени(ть|м)|исправ(ь|ить)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|удали(ть|м)?|update|patch|delete|rewrite|fix|edit|remove).{0,120}(навык|skills?|skill))|((update|patch|delete|rewrite|fix|edit|remove)[ _-]?skill)'; then
         current_turn_skill_detail_request=true
         looks_like_skill_turn=true
     fi
@@ -3985,7 +4065,6 @@ canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\n
 if [[ "$event" == "BeforeLLMCall" ]]; then
     telegram_chat_id="${system_chat_id:-}"
     next_turn_intent=""
-    next_turn_skill_create_state=""
     if [[ "$looks_like_status" == true ]]; then
         next_turn_intent="status"
     elif [[ "$looks_like_skill_visibility_request" == true ]]; then
@@ -3998,6 +4077,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         next_turn_intent="maintenance_generic"
     elif [[ "$current_turn_skill_maintenance_request" == true ]]; then
         next_turn_intent="skill_maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+    elif [[ "$current_turn_skill_mutation_request" == true || "$looks_like_sparse_skill_create_request" == true ]]; then
+        next_turn_intent="skill_native_crud"
     elif [[ "$current_turn_codex_update_request" == true ]]; then
         if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
             next_turn_intent="codex_update_scheduler"
@@ -4006,28 +4087,6 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         fi
     elif [[ "$current_turn_skill_detail_request" == true && -n "${resolved_skill_name:-}" ]]; then
         next_turn_intent="skill_detail:${resolved_skill_name}"
-    elif [[ "$looks_like_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" ]]; then
-        skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
-        case ",${skill_snapshot_csv}," in
-            *,"${requested_skill_name}",*)
-                next_turn_intent="skill_create_exists:${requested_skill_name}"
-                next_turn_skill_create_state="exists"
-                ;;
-            *)
-                if [[ "$is_telegram_safe_lane" == true ]]; then
-                    if create_runtime_skill_scaffold "$requested_skill_name"; then
-                        next_turn_intent="skill_create_created:${requested_skill_name}"
-                        next_turn_skill_create_state="created"
-                    else
-                        next_turn_intent="skill_create_failed:${requested_skill_name}"
-                        next_turn_skill_create_state="failed"
-                    fi
-                else
-                    next_turn_intent="skill_create_failed:${requested_skill_name}"
-                    next_turn_skill_create_state="failed"
-                fi
-                ;;
-        esac
     fi
 
     if [[ -n "$next_turn_intent" ]]; then
@@ -4051,6 +4110,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     persisted_codex_update_scheduler_request=false
     persisted_codex_update_maintenance_request=false
     persisted_generic_maintenance_request=false
+    persisted_skill_native_crud_request=false
     case "${persisted_turn_intent:-}" in
         codex_update)
             persisted_codex_update_request=true
@@ -4064,6 +4124,9 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
             ;;
         maintenance_generic)
             persisted_generic_maintenance_request=true
+            ;;
+        skill_native_crud)
+            persisted_skill_native_crud_request=true
             ;;
     esac
 
@@ -4159,13 +4222,6 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
                 exit 0
             fi
         fi
-        if [[ "$current_turn_sparse_skill_create_request" == true && -n "${requested_skill_name:-}" && -n "${next_turn_skill_create_state:-}" ]]; then
-            create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state" || true)"
-            if [[ -n "$create_reply_text" ]] && direct_fastpath_send_with_suppression "skill_create" "$telegram_chat_id" "$create_reply_text" "skill_create:${next_turn_skill_create_state}:${requested_skill_name}" "skill=$requested_skill_name state=$next_turn_skill_create_state"; then
-                clear_turn_intent "${turn_session_key:-}"
-                exit 0
-            fi
-        fi
         if [[ "$current_turn_skill_apply_request" == true ]]; then
             apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
             if [[ -n "$apply_reply_text" ]] && direct_fastpath_send_with_suppression "skill_apply" "$telegram_chat_id" "$apply_reply_text" "skill_apply:${requested_skill_name:-generic}" "skill=${requested_skill_name:-missing}"; then
@@ -4176,7 +4232,7 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     fi
 
     if [[ -n "${messages_json:-}" ]]; then
-        if [[ "$looks_like_broad_research_request" == true ]]; then
+        if [[ "$looks_like_broad_research_request" == true && "$looks_like_skill_turn" != true ]]; then
             # Hard override broad doc-study turns so the provider never sees the
             # original research request and cannot improvise a user-visible plan.
             long_research_guard=$'Telegram-safe hard override:\n- Ignore the prior conversation content for this turn.\n- This user-facing Telegram lane must remain text-only and must not expose internal planning.\n- Do not browse, search, inspect local files, inspect skills, or call any tools.\n- Do not say that you are going to check, search, open docs, inspect the environment, inspect the mounted workspace, read skill files, or look at existing skills right now.\n- Return exactly this single Russian sentence and nothing else: "В Telegram-safe режиме я не запускаю инструменты и не провожу глубокий поиск. Могу дать краткий ответ без поиска или продолжить в web UI/операторской сессии для полного разбора."'
@@ -4233,15 +4289,6 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
                 emit_before_llm_modified_payload "$messages_json" 0
                 exit 0
             fi
-        fi
-        if [[ -n "$requested_skill_name" && -n "$next_turn_skill_create_state" ]]; then
-            create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$next_turn_skill_create_state")"
-            create_guard="$(build_skill_create_hard_override_message "$create_reply_text")"
-            create_user=$'Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего.'
-            messages_json="[$(build_message_json system "$create_guard"),$(build_message_json user "$create_user")]"
-            write_audit_line "before_modify reason=skill_create_hard_override tool_count=0 skill=$requested_skill_name state=$next_turn_skill_create_state"
-            emit_before_llm_modified_payload "$messages_json" 0
-            exit 0
         fi
         if [[ "$current_turn_skill_apply_request" == true ]]; then
             apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
@@ -4509,20 +4556,6 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
             else
                 clear_turn_intent "${turn_session_key:-}"
                 emit_modified_payload "$skill_detail_reply_text" false
-            fi
-            exit 0
-        fi
-    fi
-    if [[ -n "$persisted_skill_create_state" && -n "$requested_skill_name" && "$looks_like_skill_visibility_request" != true && "$looks_like_skill_template_request" != true && "$looks_like_status" != true ]] && \
-       [[ "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true || "$tool_calls_present" == true || "$response_text_flat" == *"$requested_skill_name"* || "$payload_flat" == *"$requested_skill_name"* || "$event" == "MessageSending" ]]; then
-        create_reply_text="$(build_skill_create_reply_text "$requested_skill_name" "$persisted_skill_create_state" || true)"
-        if [[ -n "$create_reply_text" ]]; then
-            write_audit_line "emit_modify event=$event reason=skill_create_reply_override skill=$requested_skill_name state=$persisted_skill_create_state"
-            if [[ "$event" == "AfterLLMCall" ]]; then
-                emit_modified_payload "$create_reply_text" true
-            else
-                clear_turn_intent "${turn_session_key:-}"
-                emit_modified_payload "$create_reply_text" false
             fi
             exit 0
         fi

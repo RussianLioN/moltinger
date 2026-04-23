@@ -124,7 +124,7 @@ Additional invariant:
 Do not skip this.
 
 ```bash
-docker pull ghcr.io/moltis-org/moltis:0.10.18
+docker pull ghcr.io/moltis-org/moltis:20260421.05
 ```
 
 If the feature targets another version, replace the tag, but still pull it explicitly.
@@ -138,7 +138,7 @@ First stop it with an extended grace window, then remove it, then create the new
 cd /opt/moltinger-active
 docker stop --time 45 moltis || true
 docker rm -f moltis || true
-MOLTIS_VERSION=0.10.18 docker compose -p moltinger -f docker-compose.prod.yml up -d --no-deps moltis
+MOLTIS_VERSION=20260421.05 docker compose -p moltinger -f docker-compose.prod.yml up -d --no-deps moltis
 ```
 
 Then verify immediately:
@@ -151,8 +151,8 @@ docker inspect -f '{{.State.Health.Status}}' moltis
 
 Expected:
 
-- image shows `ghcr.io/moltis-org/moltis:0.10.18`
-- binary shows `moltis 0.10.18`
+- image shows `ghcr.io/moltis-org/moltis:20260421.05`
+- binary shows `moltis 20260421.05`
 - health becomes `healthy`
 
 ## 7. Verify OAuth persistence before trying re-auth
