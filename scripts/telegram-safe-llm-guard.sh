@@ -1787,15 +1787,13 @@ direct_fastpath_send_with_suppression() {
 emit_same_turn_fastpath_terminalization() {
     local token="${1:-}"
     local reason="${2:-direct_fastpath_terminalized}"
-    local same_turn_guard=""
-    local same_turn_user=""
-    local messages_json=""
 
-    same_turn_guard="$(build_same_turn_fastpath_guard_message)"
-    same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
-    messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
-    write_audit_line "before_modify reason=$reason token=${token:-none} iteration=${current_iteration:-missing}"
-    emit_before_llm_modified_payload "$messages_json" 0
+    # Live Moltis runtime reports that BeforeLLMCall modify payloads can be
+    # ignored because the message set is typed. After the user-visible reply is
+    # already delivered through the direct Bot API fastpath, the reliable
+    # contract is to block the LLM pass and suppress the synthetic blocked tail.
+    write_audit_line "before_block reason=$reason token=${token:-none} iteration=${current_iteration:-missing}"
+    emit_blocked_payload
 }
 
 persist_turn_intent() {
@@ -2213,26 +2211,6 @@ build_skill_maintenance_hard_override_message() {
 build_skill_detail_hard_override_message() {
     local reply_text="$1"
     build_text_only_hard_override_message "Telegram-safe skill-detail hard override" "$reply_text"
-}
-
-build_same_turn_fastpath_guard_message() {
-    cat <<'EOF'
-Telegram-safe same-turn fastpath guard:
-- A Telegram-safe direct fastpath already delivered the user-visible reply for this turn.
-- This repeated BeforeLLMCall entry is internal runtime churn, not a new user turn.
-- Do not call tools.
-- Return exactly an empty string and nothing else.
-EOF
-}
-
-build_codex_update_terminal_guard_message() {
-    cat <<'EOF'
-Telegram-safe codex-update terminal guard:
-- A deterministic codex-update reply has already been selected for this turn.
-- The runtime entered another internal pass only because a blocked tool follow-up was attempted after the hard override.
-- Do not call tools.
-- Return exactly an empty string and nothing else.
-EOF
 }
 
 read_codex_update_state_json() {
@@ -3742,6 +3720,10 @@ emit_before_llm_modified_payload() {
         "$(printf ',\"messages\":%s' "$messages_json")"
 }
 
+emit_blocked_payload() {
+    printf '{"action":"block"}\n'
+}
+
 log_guard_diagnostic() {
     local event_name="$1"
     local preview_source="$2"
@@ -4343,20 +4325,14 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     esac
 
     if [[ -n "$effective_delivery_suppression" && "$has_current_user_turn" == true && "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration > 1 )); then
-        same_turn_guard="$(build_same_turn_fastpath_guard_message)"
-        same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
-        messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
-        write_audit_line "before_modify reason=direct_fastpath_repeat_guard token=$effective_delivery_suppression iteration=$current_iteration"
-        emit_before_llm_modified_payload "$messages_json" 0
+        write_audit_line "before_block reason=direct_fastpath_repeat_guard token=$effective_delivery_suppression iteration=$current_iteration"
+        emit_blocked_payload
         exit 0
     fi
 
     if [[ "$codex_update_terminal_repeat_guard" == true || ( -n "$persisted_terminal_marker" && ( "$persisted_codex_update_request" == true || "$current_turn_codex_update_request" == true || "$loaded_persisted_codex_update_request" == true ) ) ]]; then
-        same_turn_guard="$(build_codex_update_terminal_guard_message)"
-        same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
-        messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
-        write_audit_line "before_modify reason=codex_update_terminal_repeat_guard token=$persisted_terminal_marker iteration=$current_iteration"
-        emit_before_llm_modified_payload "$messages_json" 0
+        write_audit_line "before_block reason=codex_update_terminal_repeat_guard token=$persisted_terminal_marker iteration=$current_iteration"
+        emit_blocked_payload
         exit 0
     fi
 
@@ -4407,11 +4383,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
                     write_audit_line "codex_update_direct_fastpath_terminal_marker_fallback token=$codex_update_reply_mode"
                 fi
                 write_audit_line "codex_update_direct_fastpath_fallback_state_preserved mode=$codex_update_reply_mode"
-                same_turn_guard="$(build_codex_update_terminal_guard_message)"
-                same_turn_user=$'Верни пустую строку. Не вызывай инструменты.'
-                messages_json="[$(build_message_json system "$same_turn_guard"),$(build_message_json user "$same_turn_user")]"
-                write_audit_line "before_modify reason=codex_update_direct_fastpath_terminalized token=$codex_update_reply_mode iteration=$current_iteration"
-                emit_before_llm_modified_payload "$messages_json" 0
+                write_audit_line "before_block reason=codex_update_direct_fastpath_terminalized token=$codex_update_reply_mode iteration=$current_iteration"
+                emit_blocked_payload
                 exit 0
             fi
         fi

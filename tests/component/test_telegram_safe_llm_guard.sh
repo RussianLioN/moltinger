@@ -296,10 +296,7 @@ EOF
     set -e
     if [[ "$fastpath_status_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_status_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_status_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_status_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_status_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_status_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_status_stdout" && \
        [[ -f "$fastpath_status_suppress_file" ]] && \
        grep -Fq $'\tstatus' "$fastpath_status_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_status_log" && \
@@ -307,7 +304,7 @@ EOF
        grep -Fq 'openai-codex::gpt-5.4' "$fastpath_status_log"; then
         test_pass
     else
-        test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, and leave only a delivery-suppression marker instead of triggering hook-block"
+        test_fail "Direct /status fastpath must stay handler-safe: send canonical text, return rc=0, leave only a delivery-suppression marker, and hard-block the ignored runtime LLM pass"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_codex_update_when_enabled"
@@ -359,10 +356,7 @@ EOF
     set -e
     if [[ "$fastpath_codex_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_codex_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_codex_stdout" && \
        [[ -f "$fastpath_codex_session_suppress_file" ]] && \
        [[ -f "$fastpath_codex_chat_suppress_file" ]] && \
        grep -Fq $'\tcodex_update:scheduler' "$fastpath_codex_session_suppress_file" && \
@@ -426,10 +420,7 @@ EOF
     set -e
     if [[ "$array_codex_status" -eq 0 ]] && \
        [[ ! -s "$array_codex_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$array_codex_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$array_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$array_codex_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$array_codex_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$array_codex_stdout" && \
        [[ -f "$array_codex_session_suppress_file" ]] && \
        [[ -f "$array_codex_chat_suppress_file" ]] && \
        grep -Fq $'\tcodex_update:scheduler' "$array_codex_session_suppress_file" && \
@@ -537,10 +528,7 @@ EOF
     )"
     if [[ "$fastpath_codex_recovery_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_codex_recovery_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_codex_recovery_stdout" && \
        [[ "$fastpath_codex_recovery_intent_present_after_fastpath" == true ]] && \
        [[ "$fastpath_codex_recovery_terminal_present_after_fastpath" == true ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$fastpath_codex_recovery_after_output" && \
@@ -609,10 +597,7 @@ EOF
     set -e
     if [[ "$mixed_status_codex_status" -eq 0 ]] && \
        [[ ! -s "$mixed_status_codex_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$mixed_status_codex_stdout" && \
        [[ -f "$mixed_status_codex_session_suppress" ]] && \
        [[ -f "$mixed_status_codex_chat_suppress" ]] && \
        grep -Fq $'\tstatus' "$mixed_status_codex_session_suppress" && \
@@ -702,15 +687,10 @@ EOF
     )"
     if [[ "$codex_direct_tail_status" -eq 0 ]] && \
        [[ ! -s "$codex_direct_tail_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$codex_direct_tail_stdout" && \
        [[ -f "$codex_direct_tail_session_suppress" ]] && \
        [[ -f "$codex_direct_tail_chat_suppress" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 <<<"$codex_direct_tail_repeat_before_output" && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
        jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
        jq -e '.data.arguments.command | contains("direct fastpath already handled this reply")' >/dev/null 2>&1 <<<"$codex_direct_tail_tool_output" && \
@@ -840,9 +820,7 @@ EOF
        jq -e '.data.arguments.command | contains("codex-update turn already resolved by the hard override")' >/dev/null 2>&1 <<<"$codex_terminal_tool_output" && \
        [[ "$codex_terminal_marker_present_after_tool" == true ]] && \
        [[ "$codex_terminal_suppress_absent_after_tool" == true ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 <<<"$codex_terminal_repeat_before_output" && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
        jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_terminal_after_output" && \
@@ -959,9 +937,9 @@ EOF
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_before_output" && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
        jq -e '.data.tool == "exec"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_tool_output" && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output" && \
        [[ ! -s "$codex_terminal_marker_fail_stderr_log" ]] && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update terminal guard")' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output"; then
+       jq -e '.data | not' >/dev/null 2>&1 <<<"$codex_terminal_marker_fail_repeat_before_output"; then
         test_pass
     else
         test_fail "Codex-update repeat guard must still terminalize the blocked follow-up even when the .terminal marker itself cannot be written, and it must stay silent on stderr"
@@ -1020,17 +998,14 @@ EOF
     set -e
     if [[ "$fastpath_visibility_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_visibility_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_visibility_stdout" && \
        [[ -f "$fastpath_visibility_suppress_file" ]] && \
        grep -Fq $'\tskill_visibility' "$fastpath_visibility_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_visibility_log" && \
        grep -Fq 'text=Навыки (3): codex-update, post-close-task-classifier, telegram-learner.' "$fastpath_visibility_log"; then
         test_pass
     else
-        test_fail "Direct skill-visibility fastpath must stay handler-safe: send the deterministic runtime list, return rc=0, and store only a delivery-suppression marker"
+        test_fail "Direct skill-visibility fastpath must stay handler-safe: send the deterministic runtime list, return rc=0, store only a delivery-suppression marker, and hard-block the ignored runtime LLM pass"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_template_via_bot_send_when_enabled"
@@ -1063,17 +1038,14 @@ EOF
     set -e
     if [[ "$fastpath_template_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_template_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_template_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_template_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_template_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_template_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_template_stdout" && \
        [[ -f "$fastpath_template_suppress_file" ]] && \
        grep -Fq $'\tskill_template' "$fastpath_template_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_template_log" && \
        grep -Fq 'text=Канонический минимальный шаблон навыка:' "$fastpath_template_log"; then
         test_pass
     else
-        test_fail "Direct skill-template fastpath must stay handler-safe: send the canonical scaffold, return rc=0, and leave only a delivery-suppression marker"
+        test_fail "Direct skill-template fastpath must stay handler-safe: send the canonical scaffold, return rc=0, leave only a delivery-suppression marker, and hard-block the ignored runtime LLM pass"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_skill_detail_via_bot_send_when_enabled"
@@ -1133,10 +1105,7 @@ EOF
     set -e
     if [[ "$fastpath_skill_detail_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_skill_detail_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_skill_detail_stdout" && \
        [[ -f "$fastpath_skill_detail_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_log" && \
@@ -1208,10 +1177,7 @@ EOF
     set -e
     if [[ "$fastpath_skill_detail_live_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_skill_detail_live_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_skill_detail_live_stdout" && \
        [[ -f "$fastpath_skill_detail_live_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:codex-update' "$fastpath_skill_detail_live_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_live_log" && \
@@ -1334,10 +1300,7 @@ EOF
     set -e
     if [[ "$fastpath_skill_detail_history_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_skill_detail_history_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_skill_detail_history_stdout" && \
        [[ -f "$fastpath_skill_detail_history_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_history_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_history_log" && \
@@ -1412,10 +1375,7 @@ EOF
     set -e
     if [[ "$fastpath_skill_detail_nolang_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_skill_detail_nolang_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_skill_detail_nolang_stdout" && \
        [[ -f "$fastpath_skill_detail_nolang_suppress_file" ]] && \
        grep -Fq $'\tskill_detail:telegram-learner' "$fastpath_skill_detail_nolang_suppress_file" && \
        grep -Fq 'chat_id=262872984' "$fastpath_skill_detail_nolang_log" && \
@@ -1463,15 +1423,13 @@ EOF
     set -e
     if [[ "$repeat_fastpath_status" -eq 0 ]] && \
        [[ ! -s "$repeat_fastpath_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 <"$repeat_fastpath_stdout" && \
        [[ -f "$repeat_fastpath_session_marker" ]] && \
        [[ -f "$repeat_fastpath_chat_marker" ]] && \
        [[ ! -e "$repeat_fastpath_log" ]]; then
         test_pass
     else
-        test_fail "BeforeLLMCall guard must treat iteration>1 with an active direct-fastpath marker as same-turn runtime churn: keep suppression, avoid a duplicate direct-send, and return a no-op text-only override"
+        test_fail "BeforeLLMCall guard must treat iteration>1 with an active direct-fastpath marker as same-turn runtime churn: keep suppression, avoid a duplicate direct-send, and hard-block the repeated LLM pass"
     fi
 
     test_start "component_before_llm_guard_does_not_direct_fastpath_sparse_skill_create_anymore"
@@ -3539,17 +3497,14 @@ EOF
     set -e
     if [[ "$fastpath_maintenance_status" -eq 0 ]] && \
        [[ ! -s "$fastpath_maintenance_stderr" ]] && \
-       jq -e '.action == "modify"' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
-       jq -e '.data.tool_count == 0' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
-       jq -e '.data.messages[0].content | contains("Telegram-safe same-turn fastpath guard")' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
-       jq -e '.data.messages[1].content == "Верни пустую строку. Не вызывай инструменты."' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_maintenance_stdout" && \
        [[ -f "$fastpath_maintenance_suppress_file" ]] && \
        grep -Fq $'\tmaintenance:codex_update' "$fastpath_maintenance_suppress_file" && \
        grep -Fq 'chat_id=262872999' "$fastpath_maintenance_log" && \
        grep -Fq 'text=В Telegram-safe режиме я не чиню и не отлаживаю `codex-update`' "$fastpath_maintenance_log"; then
         test_pass
     else
-        test_fail "Direct maintenance fastpath must send the deterministic codex-update boundary reply and store only a delivery-suppression marker"
+        test_fail "Direct maintenance fastpath must send the deterministic codex-update boundary reply, store only a delivery-suppression marker, and hard-block the ignored runtime LLM pass"
     fi
 
     test_start "component_message_sending_guard_rewrites_codex_update_maintenance_leak_into_boundary_reply"

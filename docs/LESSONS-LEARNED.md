@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-23
-**Total Lessons**: 86
+**Total Lessons**: 87
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (42 lessons)
+#### P1 (43 lessons)
+- [Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [GitHub Actions bad logs from post-deploy image prune and calendar tag rejection](../docs/rca/2026-04-20-github-actions-bad-logs-from-post-deploy-image-prune-and-calendar-tag-rejection.md)
@@ -189,7 +190,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (6 lessons)
+#### product (7 lessons)
+- [Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
@@ -218,14 +220,14 @@
 
 - `rca` (33 lessons)
 - `moltis` (28 lessons)
-- `telegram` (22 lessons)
+- `telegram` (23 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
 - `skills` (13 lessons)
 - `beads` (12 lessons)
-- `hooks` (10 lessons)
+- `hooks` (11 lessons)
 
 
 ---
@@ -234,8 +236,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 86 |
-| Critical (P0/P1) | 43 |
+| Total Lessons | 87 |
+| Critical (P0/P1) | 44 |
 | Categories | 8 |
 | Unique Tags | 167 |
 

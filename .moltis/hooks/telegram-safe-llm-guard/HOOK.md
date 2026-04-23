@@ -20,6 +20,12 @@ telemetry-leaking behavior or filesystem-based skill false negatives.
 It also fail-closes skill/codex-update maintenance-debug turns (`почини`,
 `исправь`, `отладь`, logs/root-cause requests) into a deterministic text-only
 boundary instead of letting runtime tool chatter leak back into Telegram.
+For direct Bot API fastpaths, the owning delivery contract is:
+
+- send the user-visible reply directly through Bot API
+- block the subsequent `BeforeLLMCall` hook event instead of relying on
+  `modify` for typed message payloads
+- suppress the synthetic blocked tail in `MessageSending`
 
 Repository note:
 
