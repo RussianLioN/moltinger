@@ -11,7 +11,14 @@
 
 | Remote Branch | Current Intent |
 |---|---|
-| `origin/fix/moltinger-mvy8-live-codex-update-scheduler-regression` | Needs decision |
+| `origin/chore/moltis-update-20260420.02` | Needs decision |
+| `origin/chore/moltis-update-20260421.05` | Needs decision |
+| `origin/chore/moltis-update-20260422.01` | Needs decision |
+| `origin/chore/topology-registry-publish` | Needs decision |
+| `origin/codex/ai-ide-workflow-handoff` | Needs decision |
+| `origin/codex/fix-deploy-heredoc` | Needs decision |
+| `origin/fix/moltis-20260423-telegram-runtime` | Needs decision |
+| `origin/fix/telegram-skill-detail-terminalize` | Needs decision |
 
 ## Reviewed Intent Awaiting Reconciliation
 
