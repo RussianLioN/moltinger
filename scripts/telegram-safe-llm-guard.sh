@@ -2208,6 +2208,10 @@ build_skill_maintenance_hard_override_message() {
     build_text_only_hard_override_message "Telegram-safe maintenance hard override" "$reply_text"
 }
 
+build_message_received_terminalized_content() {
+    printf '%s' 'Служебный Telegram-safe turn уже answered via direct delivery. Верни пустую строку и не вызывай инструменты.'
+}
+
 build_skill_detail_hard_override_message() {
     local reply_text="$1"
     build_text_only_hard_override_message "Telegram-safe skill-detail hard override" "$reply_text"
@@ -3720,6 +3724,58 @@ emit_before_llm_modified_payload() {
         "$(printf ',\"messages\":%s' "$messages_json")"
 }
 
+emit_message_received_modified_payload() {
+    local content="${1:-}"
+    printf '{"action":"modify","data":{"content":"%s"}}\n' "$(json_escape "$content")"
+}
+
+message_received_fastpath_is_same_turn_replay() {
+    [[ "${ingress_terminal_marker_active:-false}" == true ]] || return 1
+    [[ -n "${turn_session_key:-}" ]] || return 1
+    [[ -n "${current_turn_fingerprint:-}" && -n "${persisted_turn_fingerprint:-}" ]] || return 1
+    [[ "$current_turn_fingerprint" == "$persisted_turn_fingerprint" ]] || return 1
+    turn_intent_is_recent_for_repeat "${turn_session_key:-}" "$TERMINAL_REPEAT_WINDOW_SEC"
+}
+
+emit_message_received_terminalized_noop() {
+    local reason="${1:-message_received_terminalized}"
+    local token="${2:-none}"
+    local terminal_content=""
+
+    terminal_content="$(build_message_received_terminalized_content)"
+    write_audit_line "message_received_terminalized_noop reason=$reason token=${token:-none}"
+    emit_message_received_modified_payload "$terminal_content"
+}
+
+message_received_direct_fastpath_send_with_terminalization() {
+    local kind="${1:-}"
+    local chat_id="${2:-}"
+    local text="${3:-}"
+    local suppression_token="${4:-}"
+    local intent_name="${5:-}"
+    local terminal_token="${6:-}"
+    local extra_audit="${7:-}"
+
+    [[ -n "$kind" && -n "$chat_id" && -n "$text" && -n "$suppression_token" ]] || return 1
+
+    if [[ -z "$intent_name" ]]; then
+        intent_name="message_received_fastpath:${suppression_token}"
+    fi
+    if [[ -z "$terminal_token" ]]; then
+        terminal_token="$suppression_token"
+    fi
+
+    if ! direct_fastpath_send_with_suppression "$kind" "$chat_id" "$text" "$suppression_token" "$extra_audit"; then
+        return 1
+    fi
+
+    persist_turn_intent "${turn_session_key:-}" "$intent_name" "${current_turn_fingerprint:-}"
+    persist_terminal_marker "${turn_session_key:-}" "ingress:${terminal_token}" || true
+    write_audit_line "message_received_direct_fastpath kind=$kind chat_id=$chat_id token=$terminal_token${extra_audit:+ $extra_audit}"
+    emit_message_received_terminalized_noop "direct_fastpath_sent" "$terminal_token"
+    return 0
+}
+
 emit_blocked_payload() {
     printf '{"action":"block"}\n'
 }
@@ -3742,8 +3798,18 @@ event="$(extract_first_string event || true)"
 model="$(extract_first_string model || true)"
 provider="$(extract_first_string provider || true)"
 response_text="$(extract_first_string text || true)"
+message_content="$(extract_first_string content || true)"
 user_message="$(extract_first_string user_message || true)"
+if [[ "$event" == "MessageReceived" && -z "$user_message" && -n "$message_content" ]]; then
+    user_message="$message_content"
+fi
 account_id="$(extract_first_string account_id || true)"
+channel_name="$(extract_first_string channel || true)"
+channel_binding_json="$(extract_json_object channel_binding || true)"
+channel_binding_surface="$(extract_json_string_field_from_text "${channel_binding_json:-}" "surface" || true)"
+channel_binding_session_kind="$(extract_json_string_field_from_text "${channel_binding_json:-}" "session_kind" || true)"
+channel_binding_account_id="$(extract_json_string_field_from_text "${channel_binding_json:-}" "account_id" || true)"
+channel_binding_chat_id="$(extract_json_string_field_from_text "${channel_binding_json:-}" "chat_id" || true)"
 turn_session_key="$(extract_first_string session_key || true)"
 if [[ -z "$turn_session_key" ]]; then
     turn_session_key="$(extract_first_string session_id || true)"
@@ -3782,19 +3848,31 @@ case "${persisted_turn_intent:-}" in
         loaded_persisted_codex_update_scheduler_request=true
         ;;
 esac
+ingress_terminal_marker_active=false
+ingress_terminal_marker_token=""
+if [[ "${persisted_terminal_marker:-}" == ingress:* ]]; then
+    ingress_terminal_marker_active=true
+    ingress_terminal_marker_token="${persisted_terminal_marker#ingress:}"
+fi
 channel_account="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_account" || true)"
 if [[ -z "$channel_account" ]]; then
     channel_account="$(extract_runtime_field_from_text "${messages_json:-$payload_flat}" "channel_account" || true)"
+fi
+if [[ -z "$channel_account" ]]; then
+    channel_account="${channel_binding_account_id:-}"
 fi
 system_chat_id="$(extract_runtime_field_from_text "${latest_system_message:-}" "channel_chat_id" || true)"
 if [[ -z "$system_chat_id" ]]; then
     system_chat_id="$(extract_runtime_field_from_text "${messages_json:-$payload_flat}" "channel_chat_id" || true)"
 fi
+if [[ -z "$system_chat_id" ]]; then
+    system_chat_id="${channel_binding_chat_id:-}"
+fi
 delivery_chat_id="$(extract_first_string to || true)"
 if [[ -z "$delivery_chat_id" ]]; then
     delivery_chat_id="$(extract_first_number to || true)"
 fi
-current_chat_id="${delivery_chat_id:-$system_chat_id}"
+current_chat_id="${delivery_chat_id:-${system_chat_id:-$channel_binding_chat_id}}"
 persisted_chat_delivery_suppression="$(load_delivery_suppression_for_chat "${current_chat_id:-}" || true)"
 effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 has_current_user_turn=false
@@ -3823,7 +3901,7 @@ esac
 if [[ "${provider:-}" == "openai-codex" ]]; then
     is_telegram_safe_lane=true
 fi
-if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" ]]; then
+if [[ "${account_id:-}" == "moltis-bot" || "${channel_account:-}" == "moltis-bot" || "${channel_binding_account_id:-}" == "moltis-bot" ]]; then
     is_telegram_safe_lane=true
 fi
 if [[ "$is_telegram_safe_lane" != true ]] && safe_lane_marker_is_fresh "${turn_session_key:-}"; then
@@ -3834,7 +3912,7 @@ if [[ "$is_telegram_safe_lane" == true ]]; then
     persist_safe_lane_marker "${turn_session_key:-}"
 fi
 
-if [[ "$event" != "BeforeLLMCall" && "$event" != "AfterLLMCall" && "$event" != "BeforeToolCall" && "$event" != "MessageSending" ]]; then
+if [[ "$event" != "MessageReceived" && "$event" != "BeforeLLMCall" && "$event" != "AfterLLMCall" && "$event" != "BeforeToolCall" && "$event" != "MessageSending" ]]; then
     exit 0
 fi
 
@@ -4038,7 +4116,17 @@ fi
 effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 
 if [[ "$event" == "BeforeLLMCall" && -n "$persisted_terminal_marker" ]]; then
-    if [[ "$has_current_user_turn" == true ]]; then
+    if [[ "$ingress_terminal_marker_active" == true ]]; then
+        if [[ "$has_current_user_turn" == true && -n "$current_turn_fingerprint" && -n "$persisted_turn_fingerprint" && "$current_turn_fingerprint" == "$persisted_turn_fingerprint" ]] && turn_intent_is_recent_for_repeat "${turn_session_key:-}" "$TERMINAL_REPEAT_WINDOW_SEC"; then
+            write_audit_line "terminal_keep reason=matching_message_received_fastpath token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
+        else
+            write_audit_line "terminal_clear reason=new_user_turn token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
+            clear_terminal_marker "${turn_session_key:-}"
+            persisted_terminal_marker=""
+            ingress_terminal_marker_active=false
+            ingress_terminal_marker_token=""
+        fi
+    elif [[ "$has_current_user_turn" == true ]]; then
         if [[ "$current_turn_codex_update_request" == true && -n "$current_turn_fingerprint" && -n "$persisted_turn_fingerprint" && "$current_turn_fingerprint" == "$persisted_turn_fingerprint" ]] && turn_intent_is_recent_for_repeat "${turn_session_key:-}" "$TERMINAL_REPEAT_WINDOW_SEC"; then
             write_audit_line "terminal_keep reason=matching_codex_repeat token=$persisted_terminal_marker iteration=${current_iteration:-missing}"
         else
@@ -4247,6 +4335,13 @@ elif [[ "$is_telegram_safe_lane" != true ]]; then
     fi
 fi
 
+if [[ "$event" == "BeforeToolCall" && "$ingress_terminal_marker_active" == true ]]; then
+    synthetic_command="true"
+    write_audit_line "emit_modify event=$event reason=message_received_direct_fastpath_tool_suppress token=$ingress_terminal_marker_token tool=${tool_name:-missing}"
+    emit_before_tool_modified_payload "exec" "{\"command\":\"$synthetic_command\"}"
+    exit 0
+fi
+
 if [[ "$event" == "BeforeToolCall" && "$current_tool_missing_required_arguments" == true ]]; then
     synthetic_command="true"
     write_audit_line "emit_modify event=$event reason=malformed_tool_call_suppress tool=${tool_name:-missing} telegram_safe=$is_telegram_safe_lane"
@@ -4255,6 +4350,91 @@ if [[ "$event" == "BeforeToolCall" && "$current_tool_missing_required_arguments"
 fi
 
 canonical_status=$'Статус: Online\nКанал: Telegram (@moltinger_bot)\nМодель: openai-codex::gpt-5.4\nПровайдер: openai-codex\nРежим: safe-text'
+
+if [[ "$event" == "MessageReceived" ]]; then
+    telegram_chat_id="${current_chat_id:-${channel_binding_chat_id:-}}"
+    if [[ "$is_telegram_safe_lane" == true ]] && flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -n "${telegram_chat_id:-}" ]]; then
+        if message_received_fastpath_is_same_turn_replay; then
+            write_audit_line "message_received_direct_fastpath_replay token=${ingress_terminal_marker_token:-none} chat_id=$telegram_chat_id"
+            emit_message_received_terminalized_noop "same_turn_replay" "${ingress_terminal_marker_token:-none}"
+            exit 0
+        fi
+        if [[ "$current_turn_status_request" == true ]]; then
+            if message_received_direct_fastpath_send_with_terminalization "status" "$telegram_chat_id" "$canonical_status" "status" "message_received_fastpath:status" "status"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_codex_update_maintenance_request" == true ]]; then
+            maintenance_reply_text="$(build_skill_maintenance_reply_text "codex_update" || true)"
+            if [[ -n "$maintenance_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:codex_update" "codex_update_maintenance" "maintenance:codex_update" "target=codex_update"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_generic_maintenance_request" == true ]]; then
+            maintenance_reply_text="$(build_skill_maintenance_reply_text "generic" || true)"
+            if [[ -n "$maintenance_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:generic" "maintenance_generic" "maintenance:generic" "target=generic"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_skill_maintenance_request" == true ]]; then
+            maintenance_token="${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+            maintenance_reply_text="$(build_skill_maintenance_reply_text "skill" "$maintenance_token" || true)"
+            if [[ -n "$maintenance_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "maintenance" "$telegram_chat_id" "$maintenance_reply_text" "maintenance:${maintenance_token}" "skill_maintenance:${maintenance_token}" "maintenance:${maintenance_token}" "target=$maintenance_token"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_codex_update_request" == true ]]; then
+            codex_update_reply_mode="release"
+            if [[ "$current_turn_codex_update_scheduler_request" == true ]]; then
+                codex_update_reply_mode="scheduler"
+            fi
+            codex_update_reply_text="$(build_codex_update_reply_text "$codex_update_reply_mode" || true)"
+            codex_update_intent_name="codex_update"
+            if [[ "$codex_update_reply_mode" == "scheduler" ]]; then
+                codex_update_intent_name="codex_update_scheduler"
+            fi
+            if [[ -n "$codex_update_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "codex_update" "$telegram_chat_id" "$codex_update_reply_text" "codex_update:${codex_update_reply_mode}" "$codex_update_intent_name" "codex_update:${codex_update_reply_mode}" "mode=$codex_update_reply_mode"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_skill_visibility_request" == true ]]; then
+            skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
+            visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
+            if [[ -n "$visibility_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "skill_visibility" "$telegram_chat_id" "$visibility_reply_text" "skill_visibility" "skill_visibility" "skill_visibility" "snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv")"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_skill_template_request" == true ]]; then
+            template_reply_text="$(build_skill_template_reply_text)"
+            if [[ -n "$template_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "skill_template" "$telegram_chat_id" "$template_reply_text" "skill_template" "skill_template" "skill_template"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_skill_detail_request" == true ]]; then
+            skill_detail_token="${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
+            skill_detail_reply_text="$(build_skill_detail_reply_text "${requested_skill_reference_name:-}" "${resolved_skill_name:-}" "$skill_runtime_snapshot_csv" "${latest_user_message_flat:-${intent_text_flat:-}}" || true)"
+            if [[ -n "$skill_detail_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "skill_detail" "$telegram_chat_id" "$skill_detail_reply_text" "skill_detail:${skill_detail_token}" "skill_detail:${skill_detail_token}" "skill_detail:${skill_detail_token}" "skill=$skill_detail_token"; then
+                exit 0
+            fi
+        fi
+        if [[ "$current_turn_skill_apply_request" == true ]]; then
+            skill_apply_token="${requested_skill_name:-generic}"
+            apply_reply_text="$(build_skill_apply_reply_text "${requested_skill_name:-}" || true)"
+            if [[ -n "$apply_reply_text" ]] && \
+               message_received_direct_fastpath_send_with_terminalization "skill_apply" "$telegram_chat_id" "$apply_reply_text" "skill_apply:${skill_apply_token}" "message_received_fastpath:skill_apply:${skill_apply_token}" "skill_apply:${skill_apply_token}" "skill=$skill_apply_token"; then
+                exit 0
+            fi
+        fi
+    fi
+    exit 0
+fi
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
     telegram_chat_id="${system_chat_id:-}"

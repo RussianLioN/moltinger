@@ -43,6 +43,12 @@ run_component_telegram_safe_llm_guard_tests() {
         return
     fi
 
+    local suite_state_dir
+    suite_state_dir="$(secure_temp_dir telegram-safe-guard-suite)"
+    export MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$suite_state_dir/intent"
+    export MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE="$suite_state_dir/audit.log"
+    mkdir -p "$MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR"
+
     test_start "component_before_llm_guard_hard_overrides_broad_telegram_research_requests"
     local before_llm_output
     before_llm_output="$(
@@ -264,6 +270,260 @@ EOF
         test_pass
     else
         test_fail "BeforeLLMCall guard must short-circuit Codex release queries into a deterministic canonical reply instead of letting the model route them through Tavily"
+    fi
+
+    test_start "component_message_received_direct_fastpath_status_uses_channel_binding_and_rewrites_inbound_content"
+    local ingress_status_tmp ingress_status_send_script ingress_status_log ingress_status_output
+    ingress_status_tmp="$(secure_temp_dir telegram-safe-ingress-status)"
+    ingress_status_send_script="$ingress_status_tmp/send.sh"
+    ingress_status_log="$ingress_status_tmp/send.log"
+    cat >"$ingress_status_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$ingress_status_send_script"
+    ingress_status_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_status_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_status_send_script" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-status","content":"/status","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_status_output" && \
+       jq -e '.data.content | contains("Верни пустую строку")' >/dev/null 2>&1 <<<"$ingress_status_output" && \
+       jq -e '.data.content | contains("не вызывай инструменты")' >/dev/null 2>&1 <<<"$ingress_status_output" && \
+       grep -Fq 'chat_id=262872984' "$ingress_status_log" && \
+       grep -Fq 'text=Статус: Online' "$ingress_status_log" && \
+       grep -Fq 'openai-codex::gpt-5.4' "$ingress_status_log"; then
+        test_pass
+    else
+        test_fail "MessageReceived guard must direct-send canonical /status from channel_binding metadata and rewrite the inbound content into a no-tool terminalized turn"
+    fi
+
+    test_start "component_message_received_direct_fastpath_codex_update_scheduler_uses_channel_binding_and_rewrites_inbound_content"
+    local ingress_codex_tmp ingress_codex_send_script ingress_codex_log ingress_codex_output
+    ingress_codex_tmp="$(secure_temp_dir telegram-safe-ingress-codex)"
+    ingress_codex_send_script="$ingress_codex_tmp/send.sh"
+    ingress_codex_log="$ingress_codex_tmp/send.log"
+    cat >"$ingress_codex_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$ingress_codex_send_script"
+    ingress_codex_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_codex_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_codex_send_script" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-codex","content":"А разве у тебя нет крона по проверке вышедшей новой версии Codex cli?","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_codex_output" && \
+       jq -e '.data.content | contains("Верни пустую строку")' >/dev/null 2>&1 <<<"$ingress_codex_output" && \
+       jq -e '.data.content | contains("не вызывай инструменты")' >/dev/null 2>&1 <<<"$ingress_codex_output" && \
+       grep -Fq 'chat_id=262872984' "$ingress_codex_log" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$ingress_codex_log" && \
+       grep -Fq 'не подтверждаю по памяти' "$ingress_codex_log"; then
+        test_pass
+    else
+        test_fail "MessageReceived guard must direct-send codex-update scheduler guidance from channel_binding metadata and rewrite the inbound content into a no-tool terminalized turn"
+    fi
+
+    test_start "component_message_received_direct_fastpath_replay_does_not_double_send"
+    local ingress_replay_tmp ingress_replay_send_script ingress_replay_log ingress_replay_first_output ingress_replay_second_output
+    ingress_replay_tmp="$(secure_temp_dir telegram-safe-ingress-replay)"
+    ingress_replay_send_script="$ingress_replay_tmp/send.sh"
+    ingress_replay_log="$ingress_replay_tmp/send.log"
+    cat >"$ingress_replay_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+{
+    printf 'chat_id=%s\n' "$chat_id"
+    printf 'text=%s\n' "$text"
+} >>"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$ingress_replay_send_script"
+    ingress_replay_first_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_replay_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_replay_send_script" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-replay","content":"/status","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    ingress_replay_second_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_replay_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_replay_send_script" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-replay","content":"/status","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_replay_first_output" && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_replay_second_output" && \
+       [[ "$(grep -c '^chat_id=' "$ingress_replay_log")" -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "MessageReceived direct fastpath must stay idempotent for same-turn replay events and avoid duplicate Telegram sends"
+    fi
+
+    test_start "component_message_received_direct_fastpath_arms_delivery_suppression_for_late_message_sending_tail"
+    local ingress_tail_tmp ingress_tail_send_script ingress_tail_log ingress_tail_output
+    ingress_tail_tmp="$(secure_temp_dir telegram-safe-ingress-tail)"
+    ingress_tail_send_script="$ingress_tail_tmp/send.sh"
+    ingress_tail_log="$ingress_tail_tmp/send.log"
+    cat >"$ingress_tail_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$ingress_tail_send_script"
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$ingress_tail_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_tail_send_script" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"MessageReceived","session_key":"session:ingress-tail","content":"/status","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    ingress_tail_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_tail_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_tail_send_script" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:ingress-tail","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":991,"text":"📋 Activity log: should never leak after ingress fastpath"}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_tail_output" && \
+       jq -e '.data.text == "NO_REPLY"' >/dev/null 2>&1 <<<"$ingress_tail_output"; then
+        test_pass
+    else
+        test_fail "MessageReceived direct fastpath must arm delivery suppression so a late MessageSending tail is force-dropped"
+    fi
+
+    test_start "component_message_received_direct_fastpath_failed_send_falls_back_without_stale_state"
+    local ingress_fail_tmp ingress_fail_send_script ingress_fail_output ingress_fail_before_llm_output
+    ingress_fail_tmp="$(secure_temp_dir telegram-safe-ingress-fail)"
+    ingress_fail_send_script="$ingress_fail_tmp/send.sh"
+    cat >"$ingress_fail_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 1
+EOF
+    chmod +x "$ingress_fail_send_script"
+    ingress_fail_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_fail_send_script" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-fail","content":"Проверь последние релизы Codex и кратко скажи, есть ли новая стабильная версия","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"moltis-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    ingress_fail_before_llm_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_fail_send_script" \
+            MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:ingress-fail","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Проверь последние релизы Codex и кратко скажи, есть ли новая стабильная версия"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if [[ -z "$ingress_fail_output" ]] && \
+       jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$ingress_fail_before_llm_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$ingress_fail_before_llm_output"; then
+        test_pass
+    else
+        test_fail "When MessageReceived direct send fails, the hook must leave no stale ingress state and fall back to the normal Telegram-safe BeforeLLMCall contract"
+    fi
+
+    test_start "component_message_received_direct_fastpath_ignores_foreign_telegram_binding"
+    local ingress_foreign_tmp ingress_foreign_send_script ingress_foreign_log ingress_foreign_output
+    ingress_foreign_tmp="$(secure_temp_dir telegram-safe-ingress-foreign)"
+    ingress_foreign_send_script="$ingress_foreign_tmp/send.sh"
+    ingress_foreign_log="$ingress_foreign_tmp/send.log"
+    cat >"$ingress_foreign_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected\n' >>"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$ingress_foreign_send_script"
+    ingress_foreign_output="$(
+        env PATH="$MINIMAL_PATH" \
+            FASTPATH_LOG="$ingress_foreign_log" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$ingress_foreign_send_script" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","session_key":"session:ingress-foreign","content":"/status","channel":"telegram","channel_binding":{"surface":"telegram","session_kind":"channel","channel_type":"telegram","account_id":"foreign-bot","chat_id":"262872984","chat_type":"private","sender_id":"262872984"}}
+EOF
+    )"
+    if [[ -z "$ingress_foreign_output" ]] && [[ ! -f "$ingress_foreign_log" ]]; then
+        test_pass
+    else
+        test_fail "MessageReceived direct fastpath must stay scoped to the trusted Moltis Telegram binding and ignore foreign account_id values"
     fi
 
     test_start "component_before_llm_guard_direct_fastpaths_status_via_bot_send_when_enabled"
@@ -3684,20 +3944,23 @@ EOF
     fi
 
     test_start "component_telegram_bot_send_prefers_env_token_when_env_file_is_unreadable"
-    local telegram_send_tmp telegram_send_fakebin telegram_send_env telegram_send_stdout telegram_send_stderr telegram_send_status telegram_send_curl_log
+    local telegram_send_tmp telegram_send_fakebin telegram_send_env telegram_send_stdout telegram_send_stderr telegram_send_status telegram_send_curl_log telegram_send_curl_stdin
     telegram_send_tmp="$(secure_temp_dir telegram-bot-send-env-token)"
     telegram_send_fakebin="$telegram_send_tmp/fakebin"
     telegram_send_env="$telegram_send_tmp/unreadable.env"
     telegram_send_stdout="$telegram_send_tmp/stdout.log"
     telegram_send_stderr="$telegram_send_tmp/stderr.log"
     telegram_send_curl_log="$telegram_send_tmp/curl.log"
+    telegram_send_curl_stdin="$telegram_send_tmp/curl-stdin.log"
     mkdir -p "$telegram_send_fakebin"
     printf 'TELEGRAM_BOT_TOKEN=from-file-should-not-be-needed\n' >"$telegram_send_env"
     chmod 000 "$telegram_send_env"
-    cat >"$telegram_send_fakebin/curl" <<'EOF'
+cat >"$telegram_send_fakebin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" >"$CURL_LOG"
+stdin_config="$(cat)"
+printf '%s' "$stdin_config" >"$CURL_STDIN_LOG"
 printf '{"ok":true}\n'
 EOF
     chmod +x "$telegram_send_fakebin/curl"
@@ -3706,6 +3969,7 @@ EOF
         TELEGRAM_BOT_TOKEN="env-token-123" \
         MOLTIS_ENV_FILE="$telegram_send_env" \
         CURL_LOG="$telegram_send_curl_log" \
+        CURL_STDIN_LOG="$telegram_send_curl_stdin" \
         bash "$PROJECT_ROOT/scripts/telegram-bot-send.sh" --chat-id 42 --text "hello from test" >"$telegram_send_stdout" 2>"$telegram_send_stderr"
     telegram_send_status=$?
     set -e
@@ -3713,7 +3977,9 @@ EOF
     if [[ "$telegram_send_status" -eq 0 ]] && \
        grep -Fq '"ok":true' "$telegram_send_stdout" && \
        [[ ! -s "$telegram_send_stderr" ]] && \
-       grep -Fq 'https://api.telegram.org/botenv-token-123/sendMessage' "$telegram_send_curl_log" && \
+       grep -Fq -- '--config' "$telegram_send_curl_log" && \
+       ! grep -Fq 'env-token-123' "$telegram_send_curl_log" && \
+       grep -Fq 'https://api.telegram.org/botenv-token-123/sendMessage' "$telegram_send_curl_stdin" && \
        grep -Fq '"chat_id":"42"' "$telegram_send_curl_log" && \
        grep -Fq '"text":"hello from test"' "$telegram_send_curl_log"; then
         test_pass

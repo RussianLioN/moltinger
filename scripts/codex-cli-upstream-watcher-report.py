@@ -643,7 +643,7 @@ recommendations_action = {
 consent_status = "disabled"
 consent_reason = (
     "Repo-side Telegram follow-up отключён по официальному контракту Moltis: "
-    "Telegram channel сейчас не заявляет interactive components, а MessageReceived и Command hooks остаются read-only."
+    "Telegram channel сейчас не заявляет interactive components; MessageReceived уже умеет modify/block inbound text, но Command остаётся read-only и безопасного callback UX всё ещё нет."
 )
 consent_expires_at = ""
 

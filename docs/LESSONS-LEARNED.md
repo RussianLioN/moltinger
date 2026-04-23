@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-23
-**Total Lessons**: 87
+**Total Lessons**: 88
 
 ---
 
@@ -15,6 +15,7 @@
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
 #### P1 (43 lessons)
+- [Telegram shell-hook block contract and MessageSending assumptions were false](../docs/rca/2026-04-23-telegram-shell-hook-block-contract-and-message-sending-assumptions-were-false.md)
 - [Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)

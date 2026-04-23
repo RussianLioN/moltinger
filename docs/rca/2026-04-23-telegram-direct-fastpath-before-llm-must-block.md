@@ -1,16 +1,16 @@
 ---
-title: "Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify"
+title: "Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract"
 date: 2026-04-23
 severity: P1
 category: product
 tags: [telegram, hooks, runtime, skill-detail, codex-update]
-root_cause: "After a successful Telegram direct fastpath send, the repo hook still tried to terminalize the turn with BeforeLLMCall modify payloads, but the live Moltis runtime explicitly ignored that path for typed messages; the reliable contract was to block the LLM pass and suppress the synthetic blocked tail."
+root_cause: "This RCA was later superseded. Official Moltis `20260423.01` source showed that shell-hook stdout `{\"action\":\"block\"}` is not a block at all, BeforeLLMCall modify is ignored for typed payloads, and silent user-clean terminalization cannot be achieved by the repo through that path alone."
 ---
 
-# RCA: Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify
+# RCA: Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract
 
 Date: 2026-04-23
-Status: Resolved in source, pending deploy/live re-verification
+Status: Superseded by `2026-04-23-telegram-shell-hook-block-contract-and-message-sending-assumptions-were-false.md`
 Context: follow-up investigation for Telegram `skill_detail` / `codex-update` runtime leakage
 
 ## Error

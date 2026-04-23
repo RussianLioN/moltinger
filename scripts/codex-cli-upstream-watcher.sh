@@ -999,7 +999,7 @@ main() {
     fi
 
     if [[ "$TELEGRAM_CONSENT_ENABLED" == "true" || "$TELEGRAM_CONSENT_ROUTER_ENABLED" == "true" || "$TELEGRAM_ALLOW_GETUPDATES" == "true" || "$TELEGRAM_COMMAND_HOOK_READY" == "true" ]]; then
-        add_warning "Interactive Telegram consent UX retired in watcher: official Moltis docs keep Telegram without interactive components, and MessageReceived/Command hooks stay read-only. Watcher sends only one-way alerts."
+        add_warning "Interactive Telegram consent UX retired in watcher: official Moltis docs keep Telegram without interactive components; MessageReceived can gate ingress, but Command remains read-only and there is still no callback-grade Telegram UX. Watcher sends only one-way alerts."
     fi
     TELEGRAM_CONSENT_ENABLED="false"
     TELEGRAM_CONSENT_ROUTER_ENABLED="false"

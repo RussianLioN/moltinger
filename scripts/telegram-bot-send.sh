@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
-MOLTIS_ENV_FILE="${MOLTIS_ENV_FILE:-.env}"
+MOLTIS_ENV_FILE="${MOLTIS_ENV_FILE:-}"
 TELEGRAM_TIMEOUT_SECONDS="${TELEGRAM_TIMEOUT_SECONDS:-20}"
 
 show_help() {
@@ -27,7 +27,7 @@ Optional:
 
 Environment:
   TELEGRAM_BOT_TOKEN          Required if --token not provided
-  MOLTIS_ENV_FILE             Optional env file path (default: .env)
+  MOLTIS_ENV_FILE             Optional explicit env file path
   TELEGRAM_TIMEOUT_SECONDS    API timeout in seconds (default: 20)
 EOF
 }
@@ -135,7 +135,7 @@ done
 
 require_bin curl
 
-if [[ -z "${TOKEN_OVERRIDE:-}" && -z "${TELEGRAM_BOT_TOKEN:-}" && -f "$MOLTIS_ENV_FILE" ]]; then
+if [[ -z "${TOKEN_OVERRIDE:-}" && -z "${TELEGRAM_BOT_TOKEN:-}" && -n "${MOLTIS_ENV_FILE:-}" && -f "$MOLTIS_ENV_FILE" ]]; then
     if [[ -r "$MOLTIS_ENV_FILE" ]]; then
         set -a
         # shellcheck disable=SC1090
@@ -183,12 +183,14 @@ if [[ -n "$REPLY_MARKUP_JSON" ]]; then
 fi
 payload+="}"
 
+api_url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
 response="$(
-    curl -sS --max-time "$TELEGRAM_TIMEOUT_SECONDS" \
-        -X POST \
-        -H "content-type: application/json" \
-        -d "$payload" \
-        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+    printf 'url = "%s"\n' "$api_url" \
+        | curl -sS --max-time "$TELEGRAM_TIMEOUT_SECONDS" \
+            -X POST \
+            -H "content-type: application/json" \
+            -d "$payload" \
+            --config -
 )"
 
 printf '%s\n' "$response"
