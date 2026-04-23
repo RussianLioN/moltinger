@@ -1033,6 +1033,102 @@ JSON
   exit 0
 fi
 
+if [[ "$mode" == "codex_update_scheduler_skill_detail_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "codex-update — показывает, есть ли новая стабильная версия Codex CLI, почему это важно и что стоит делать дальше. Полезен, когда нужно быстро понять важность нового релиза без ручного обхода changelog.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_context_contract_safe_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "Раньше повторные сообщения про Codex CLI появлялись из-за дефекта старого контура дедупликации. После исправлений схема такая: scheduler path проверяет официальный upstream Codex CLI каждые 6 часов, считает fingerprint и сравнивает его с `last_alert_fingerprint`. Если fingerprint уже объявлялся, навык пишет `suppressed`, сохраняет `last_seen_version`, `last_seen_fingerprint`, `last_run_at` и не шлёт дубль.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
+if [[ "$mode" == "codex_update_context_release_summary_false_positive_pass" ]]; then
+  cat <<'JSON'
+{
+  "ok": true,
+  "status": "pass",
+  "stage": "wait_reply",
+  "reply_text": "По официальному release latest у Codex CLI сейчас версия rust-v0.124.0. Дата публикации: 2026-04-23. В сохранённом состоянии навыка codex-update раньше была 0.123.0 по проверке от 2026-04-23.",
+  "reply_mid": 42,
+  "sent_mid": 41,
+  "checks": {
+    "non_empty": true,
+    "min_length": true,
+    "reply_settled": true,
+    "error_signature_clean": true,
+    "sensitive_signature_clean": true
+  },
+  "failures": [],
+  "attribution_evidence": {
+    "attribution_confidence": "proven"
+  },
+  "diagnostic_context": {
+    "stats": {
+      "url": "https://web.telegram.org/k/#@moltinger_bot",
+      "hasSearch": true
+    }
+  },
+  "recommended_action": "Authoritative Telegram Web path passed; no secondary diagnostics are needed."
+}
+JSON
+  exit 0
+fi
+
 if [[ "$mode" == "skill_visibility_false_negative_pass" ]]; then
   cat <<'JSON'
 {
@@ -2185,6 +2281,55 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must allow the remote-safe codex-update scheduler contract reply"
     fi
 
+    test_start "component_telegram_remote_uat_fails_codex_update_scheduler_question_when_reply_falls_into_skill_detail_summary"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_skill_detail_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Как часто навык codex-update автоматически проверяет обновления Codex CLI?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-skill-detail.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when a codex-update scheduler question gets a generic skill-detail summary instead of the dedicated scheduler contract"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-skill-detail.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify codex-update scheduler questions that degrade into skill-detail wording as a scheduler contract mismatch"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_allows_codex_update_context_contract_reply"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_context_contract_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Что изменилось в навыке codex-update после исправлений?" \
+        --output "$TEST_TMPDIR/result-codex-update-context-safe.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must allow the dedicated codex-update history/scheme contract reply and must not misclassify it as a skill-update mutation"
+    fi
+
+    test_start "component_telegram_remote_uat_fails_codex_update_context_question_when_reply_falls_into_release_summary"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_context_release_summary_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Почему раньше ты три раза подряд присылал новость про обновление Codex CLI?" \
+        --output "$TEST_TMPDIR/result-codex-update-context-release-summary.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when a codex-update history/scheme question gets only a release/state summary instead of the dedicated context contract"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_context_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-context-release-summary.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify codex-update history/scheme questions that degrade into plain release summaries as a context contract mismatch"
+        fi
+    fi
+
     test_start "component_telegram_remote_uat_fails_skill_visibility_false_negative_against_live_api_skills"
     if PATH="$TEST_TMPDIR:$PATH" \
         MOLTIS_PASSWORD=test-password \
@@ -2354,6 +2499,24 @@ run_component_telegram_remote_uat_contract_tests() {
         test_pass
     else
         test_fail "Authoritative wrapper must allow Telegram skill creation only after live /api/skills proves persistence and the immediate follow-up visibility reply mentions the new skill"
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_create_for_exact_russian_create_prompt_with_description_tail"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-create-russian-tail" \
+        MOLTIS_CURL_STUB_MODE=create_persisted \
+        TELEGRAM_WEB_STUB_MODE=skill_create_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Создай навык codex-update-new для отслеживания новых версий Moltis" \
+        --output "$TEST_TMPDIR/result-skill-create-russian-tail.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must parse exact Russian create-skill wording with a descriptive tail and accept the run only after live /api/skills plus follow-up visibility prove persistence"
     fi
 
     test_start "component_telegram_remote_uat_fails_skill_create_when_followup_visibility_does_not_mention_new_skill"

@@ -132,6 +132,83 @@ EOF
         test_fail "BeforeLLMCall guard must keep sparse Telegram skill creation on the native tool lane, allow same-turn native refinement, and avoid repo-owned scaffold writes"
     fi
 
+    test_start "component_before_llm_guard_keeps_codex_update_analogy_create_turn_out_of_maintenance_bucket"
+    local before_llm_skill_analogy_output
+    before_llm_skill_analogy_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:abg-analogy","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Создай навык moltis-update-dialog-20260424-uat для отслеживания новых версий Moltis по аналогии с codex-update."}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '.data.messages | length >= 4' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("не чиню и не отлаживаю `codex-update`") | not' >/dev/null 2>&1 <<<"$before_llm_skill_analogy_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must treat create-skill turns that mention codex-update only as an analogy as native skill-authoring work, not as codex-update maintenance/log repair"
+    fi
+
+    test_start "component_message_received_guard_does_not_reuse_prior_maintenance_intent_for_plain_create_turn"
+    local maintenance_create_dir maintenance_create_audit maintenance_create_output
+    maintenance_create_dir="$(secure_temp_dir telegram-safe-maintenance-create)"
+    maintenance_create_audit="$maintenance_create_dir/audit.log"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$maintenance_create_dir" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE="$maintenance_create_audit" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:maintenance-create","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Почини codex-update."}],"tool_count":37,"iteration":1}}
+EOF
+    maintenance_create_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$maintenance_create_dir" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_AUDIT_FILE="$maintenance_create_audit" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageReceived","data":{"session_key":"session:maintenance-create","channel":"telegram","channel_chat_id":"262872984","message":{"role":"user","content":"Создай навык codex-update-new для отслеживания новых версий Moltis."}}}
+EOF
+    )"
+    if [[ -z "$maintenance_create_output" ]] && \
+       grep -Fq 'safe_lane_restored source=marker session=session:maintenance-create' "$maintenance_create_audit" && \
+       ! grep -Fq 'message_received_direct_fastpath kind=maintenance chat_id=262872984 token=maintenance:codex-update-new target=codex-update-new' "$maintenance_create_audit" && \
+       ! grep -Fq 'message_received_direct_fastpath kind=skill_detail chat_id=262872984 token=skill_detail:codex-update-new skill=codex-update-new' "$maintenance_create_audit"; then
+        test_pass
+    else
+        test_fail "MessageReceived guard must not reuse a previous maintenance turn to fastpath a new plain create-skill request as maintenance or skill-detail"
+    fi
+
+    test_start "component_before_llm_guard_replaces_prior_maintenance_intent_with_native_create_lane"
+    local maintenance_to_create_dir maintenance_to_create_output maintenance_to_create_intent
+    maintenance_to_create_dir="$(secure_temp_dir telegram-safe-maintenance-to-create)"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$maintenance_to_create_dir" \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:maintenance-to-create","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Почини codex-update."}],"tool_count":37,"iteration":1}}
+EOF
+    maintenance_to_create_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$maintenance_to_create_dir" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:maintenance-to-create","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык codex-update-new для отслеживания новых версий Moltis."}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    maintenance_to_create_intent="$(cat "$maintenance_to_create_dir/session_maintenance-to-create.intent" 2>/dev/null || true)"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       jq -e '([.data.messages[].content] | join("\n")) | contains("не чиню и не отлаживаю") | not' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
+       [[ "$maintenance_to_create_intent" == *$'\tskill_native_crud\t'* ]]; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must replace stale maintenance intent with the native skill CRUD lane when the latest user turn is a plain create-skill request"
+    fi
+
     test_start "component_before_llm_guard_hard_overrides_skill_visibility_queries_to_deterministic_runtime_list"
     local before_llm_skill_visibility_output
     before_llm_skill_visibility_output="$(
@@ -628,6 +705,68 @@ EOF
         test_pass
     else
         test_fail "When direct fastpath is enabled, codex-update scheduler turns must use the same Bot API delivery contract as the other live-proven Telegram-safe routes and arm same-turn suppression markers"
+    fi
+
+    test_start "component_before_llm_guard_prioritizes_codex_update_scheduler_over_implicit_skill_detail"
+    local codex_skill_named_tmp codex_skill_named_send_script codex_skill_named_log codex_skill_named_stdout codex_skill_named_stderr codex_skill_named_status codex_skill_named_intent_dir codex_skill_named_session_suppress codex_skill_named_chat_suppress
+    codex_skill_named_tmp="$(secure_temp_dir telegram-safe-codex-update-skill-named)"
+    codex_skill_named_send_script="$codex_skill_named_tmp/send.sh"
+    codex_skill_named_log="$codex_skill_named_tmp/send.log"
+    codex_skill_named_intent_dir="$codex_skill_named_tmp/intent"
+    codex_skill_named_session_suppress="$codex_skill_named_intent_dir/session_skillnamedcodex.suppress"
+    codex_skill_named_chat_suppress="$codex_skill_named_intent_dir/chat-262872984.suppress"
+    cat >"$codex_skill_named_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$codex_skill_named_send_script"
+    codex_skill_named_stdout="$codex_skill_named_tmp/stdout.log"
+    codex_skill_named_stderr="$codex_skill_named_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$codex_skill_named_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_skill_named_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$codex_skill_named_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$codex_skill_named_stdout" 2>"$codex_skill_named_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:skillnamedcodex","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Как часто навык codex-update автоматически проверяет обновления Codex CLI?"}],"tool_count":37,"iteration":1}}
+EOF
+    codex_skill_named_status=$?
+    set -e
+    if [[ "$codex_skill_named_status" -eq 0 ]] && \
+       [[ ! -s "$codex_skill_named_stderr" ]] && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$codex_skill_named_stdout" && \
+       [[ -f "$codex_skill_named_session_suppress" ]] && \
+       [[ -f "$codex_skill_named_chat_suppress" ]] && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_skill_named_session_suppress" && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_skill_named_chat_suppress" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$codex_skill_named_log" && \
+       grep -Fq 'операторский/runtime check' "$codex_skill_named_log" && \
+       ! grep -Fq 'показывает, есть ли новая стабильная версия Codex CLI' "$codex_skill_named_log"; then
+        test_pass
+    else
+        test_fail "A scheduler question that explicitly names codex-update as a skill must still stay on the codex-update scheduler contract instead of drifting into implicit skill-detail routing"
     fi
 
     test_start "component_codex_update_direct_fastpath_handles_array_message_content_from_live_payload"
@@ -3767,6 +3906,67 @@ EOF
         test_fail "Direct maintenance fastpath must send the deterministic codex-update boundary reply, store only a delivery-suppression marker, and hard-block the ignored runtime LLM pass"
     fi
 
+    test_start "component_before_llm_guard_direct_fastpaths_codex_update_context_questions_when_enabled"
+    local fastpath_context_tmp fastpath_context_send_script fastpath_context_log fastpath_context_stdout fastpath_context_stderr fastpath_context_status fastpath_context_intent_dir fastpath_context_suppress_file
+    fastpath_context_tmp="$(secure_temp_dir telegram-safe-fastpath-context)"
+    fastpath_context_send_script="$fastpath_context_tmp/send.sh"
+    fastpath_context_log="$fastpath_context_tmp/send.log"
+    fastpath_context_intent_dir="$fastpath_context_tmp/intent"
+    fastpath_context_suppress_file="$fastpath_context_intent_dir/session_fastcontext.suppress"
+    cat >"$fastpath_context_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$fastpath_context_send_script"
+    fastpath_context_stdout="$fastpath_context_tmp/stdout.log"
+    fastpath_context_stderr="$fastpath_context_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$fastpath_context_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$fastpath_context_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$fastpath_context_send_script" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$fastpath_context_stdout" 2>"$fastpath_context_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:fastcontext","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262873011 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Какая сейчас схема работы у навыка codex-update?"}],"tool_count":37,"iteration":1}}
+EOF
+    fastpath_context_status=$?
+    set -e
+    if [[ "$fastpath_context_status" -eq 0 ]] && \
+       [[ ! -s "$fastpath_context_stderr" ]] && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$fastpath_context_stdout" && \
+       [[ -f "$fastpath_context_suppress_file" ]] && \
+       grep -Fq $'\tcodex_update:context' "$fastpath_context_suppress_file" && \
+       grep -Fq 'chat_id=262873011' "$fastpath_context_log" && \
+       grep -Fq 'После исправлений схема такая' "$fastpath_context_log" && \
+       grep -Fq 'каждые 6 часов' "$fastpath_context_log" && \
+       grep -Fq 'last_alert_fingerprint' "$fastpath_context_log" && \
+       grep -Fq 'suppressed' "$fastpath_context_log" && \
+       ! grep -Fq 'показывает, есть ли новая стабильная версия' "$fastpath_context_log"; then
+        test_pass
+    else
+        test_fail "Direct codex-update context fastpath must send the deterministic current-scheme reply, store the context suppression marker, and hard-block the ignored runtime LLM pass"
+    fi
+
     test_start "component_message_sending_guard_rewrites_codex_update_maintenance_leak_into_boundary_reply"
     local codex_update_maintenance_intent_dir codex_update_maintenance_message_output
     codex_update_maintenance_intent_dir="$(secure_temp_dir telegram-safe-codex-update-maintenance-message)"
@@ -3890,6 +4090,27 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must rewrite codex-update scheduler questions into the deterministic remote-safe contract instead of leaving memory/tool reasoning in place"
+    fi
+
+    test_start "component_after_llm_guard_rewrites_codex_update_context_questions_into_current_scheme_reply"
+    local codex_update_context_after_output
+    codex_update_context_after_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-codex-update-context-after)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","session_key":"session:codex-update-context-after","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262873012 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Что изменилось в навыке codex-update после исправлений?"}],"text":"codex-update — показывает, есть ли новая стабильная версия Codex CLI, почему это важно и что стоит делать дальше.","tool_calls":[]}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.text | contains("После исправлений схема такая")' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.text | contains("каждые 6 часов")' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.text | contains("last_alert_fingerprint")' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.text | contains("suppressed")' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_update_context_after_output" && \
+       jq -e '.data.text | test("показывает, есть ли новая стабильная версия|Activity log|Searching memory|missing '\''query'\'' parameter|missing '\''command'\'' parameter") | not' >/dev/null 2>&1 <<<"$codex_update_context_after_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must rewrite codex-update history/scheme questions into the deterministic current-scheme contract instead of leaving them in generic skill-detail wording"
     fi
 
     test_start "component_message_sending_guard_rewrites_codex_update_scheduler_memory_leak_into_remote_safe_contract_reply"
