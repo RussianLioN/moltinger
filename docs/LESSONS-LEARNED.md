@@ -14,9 +14,9 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (43 lessons)
-- [Telegram shell-hook block contract and MessageSending assumptions were false](../docs/rca/2026-04-23-telegram-shell-hook-block-contract-and-message-sending-assumptions-were-false.md)
-- [Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
+#### P1 (44 lessons)
+- [Telegram Web probe collapsed multiline /status replies before exact semantic review](../docs/rca/2026-04-23-telegram-web-probe-collapsed-multiline-status-contract.md)
+- [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [GitHub Actions bad logs from post-deploy image prune and calendar tag rejection](../docs/rca/2026-04-20-github-actions-bad-logs-from-post-deploy-image-prune-and-calendar-tag-rejection.md)
@@ -161,7 +161,8 @@
 - [2026-03-03-rca-comprehensive-test](../docs/rca/2026-03-03-rca-comprehensive-test.md)
 - [2026-03-03-git-branch-confusion](../docs/rca/2026-03-03-git-branch-confusion.md)
 
-#### process (28 lessons)
+#### process (29 lessons)
+- [Telegram Web probe collapsed multiline /status replies before exact semantic review](../docs/rca/2026-04-23-telegram-web-probe-collapsed-multiline-status-contract.md)
 - [Worktree Phase A returned before local Beads runtime was ready and plain bd worktree list still depended on cwd](../docs/rca/2026-04-15-worktree-phase-a-readiness-and-canonical-worktree-list-routing.md)
 - [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree governance helpers trusted contextual Beads state instead of canonical ownership/runtime evidence](../docs/rca/2026-04-15-worktree-governance-helpers-trusted-contextual-beads-state.md)
@@ -192,7 +193,7 @@
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
 #### product (7 lessons)
-- [Telegram direct fastpath had to block BeforeLLMCall instead of relying on modify](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
+- [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
 - [Telegram codex-update live runtime ignored in-band hook modify despite correct guard output](../docs/rca/2026-04-14-telegram-codex-update-live-runtime-ignored-inband-modify.md)
@@ -219,9 +220,9 @@
 
 ### Popular Tags
 
-- `rca` (33 lessons)
+- `rca` (34 lessons)
 - `moltis` (28 lessons)
-- `telegram` (23 lessons)
+- `telegram` (24 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
@@ -237,10 +238,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 87 |
-| Critical (P0/P1) | 44 |
+| Total Lessons | 88 |
+| Critical (P0/P1) | 45 |
 | Categories | 8 |
-| Unique Tags | 167 |
+| Unique Tags | 171 |
 
 ---
 
