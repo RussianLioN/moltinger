@@ -2332,7 +2332,7 @@ text_looks_like_maintenance_request() {
 
     [[ -n "$source_text" ]] || return 1
 
-    printf '%s' "$source_text" | grep -Eiq '(почин(и|ить|им|ю|ите)|исправ(ь|ить|им|лю|ьте)|отлад(ь|ить|им|ка|ку)|разбер(и|ись|ем|у)|расслед(уй|овать|уем)|диагност(ируй|ировать|ика)|debug|repair|fix|troubleshoot|investigat(e|ion)|inspect|лог(и|ов|ами|ах)?|logs?|ошибк(а|и|у|ой)|error|errors|не работает|не срабатывает|не отвечает|сломал(ось|ся|и)?|сломано|root cause|rca)'
+    printf '%s' "$source_text" | grep -Eiq '(почин(и|ить|им|ю|ите)|исправ(ь|ить|им|лю|ьте)|отлад(ь|ить|им|ка|ку)|разбер(и|ись|ем|у)|расслед(уй|овать|уем)|диагност(ируй|ировать|ика)|debug|repair|fix|troubleshoot|investigat(e|ion)|inspect|лог(и|ов|ами|ах)?|logs?|ошибк(а|и|у|ой)|error|errors|не работает|не срабатывает|не отвечает|сломал(ось|ся|и)?|сломан(а|о|ы)?|root cause|rca)'
 }
 
 flag_enabled() {
@@ -3091,10 +3091,10 @@ response_has_delivery_internal_trace() {
             | sed 's/[[:space:]][[:space:]]*/ /g'
     )"
 
-    if printf '%s' "$flat" | grep -Eiq "activity log([[:space:]]|$).*(•|running:|searching memory|fetching (github\\.com|https?://)|mcp tool error|validation errors for call\\[|tool-progress|mcp__|nodes_list|sessions_list|missing '(action|query|command)' parameter|list failed:)"; then
+    if printf '%s' "$flat" | grep -Eiq "activity log([[:space:]]|$).*(•|running:|searching memory|fetching (github\\.com|https?://)|mcp tool error|validation errors for call\\[|tool-progress|mcp__|nodes_list|sessions_list|missing '(action|query|command|name|pattern)'( parameter)?|list failed:)"; then
         return 0
     fi
-    if printf '%s' "$flat" | grep -Eiq "running:|searching memory|nodes_list|sessions_list|missing '(action|query|command)' parameter|list failed:|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress"; then
+    if printf '%s' "$flat" | grep -Eiq "running:|searching memory|nodes_list|sessions_list|missing '(action|query|command|name|pattern)'( parameter)?|list failed:|mcp tool error|validation errors for call\\[|fetching (github\\.com|https?://)|tool-progress"; then
         return 0
     fi
     if printf '%s' "$flat" | grep -Eiq '(^|[[:space:]])(•|🔧|🗺️|💻|🔗|🌐|🧠|❌)[[:space:]]*mcp__'; then
@@ -3114,7 +3114,7 @@ delivery_internal_suffix_is_appended() {
             | sed 's/[[:space:]][[:space:]]*/ /g'
     )"
 
-    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+Activity log[[:space:]]+(•|running:|searching memory|fetching (github\.com|https?://)|mcp tool error|validation errors for call\[|tool-progress|mcp__|nodes_list|sessions_list|missing '\''(action|query|command)'\'' parameter|list failed:)'; then
+    if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+Activity log[[:space:]]+(•|running:|searching memory|fetching (github\.com|https?://)|mcp tool error|validation errors for call\[|tool-progress|mcp__|nodes_list|sessions_list|missing '\''(action|query|command|name|pattern)'\''( parameter)?|list failed:)'; then
         return 0
     fi
     if printf '%s' "$flat" | grep -Eiq '^.+[^[:space:]][[:space:]]+•[[:space:]]+mcp__[A-Za-z0-9_:.:-]+'; then
@@ -3140,7 +3140,7 @@ strip_delivery_internal_suffix() {
 
     cleaned="$(
         printf '%s' "$cleaned" \
-            | sed -E 's/[[:space:]]+Activity log([[:space:]]*[•:-][[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call|missing '\''(action|query|command)'\'' parameter).*)$//I' \
+            | sed -E 's/[[:space:]]+Activity log([[:space:]]*[•:-][[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call|missing '\''(action|query|command|name|pattern)'\''( parameter)?).*)$//I' \
             | sed -E 's/[[:space:]]+•[[:space:]]*(mcp__|Running:|Searching memory|Thinking|Fetching (github\.com|https?:\/\/)|tool-progress|tool call).*$//I'
     )"
 
@@ -3157,7 +3157,7 @@ clean_delivery_text_is_safe_for_direct_send() {
 
     [[ -n "$text" ]] || return 1
 
-    if printf '%s' "$text" | grep -Eiq 'running:|searching memory|thinking|nodes_list|sessions_list|mcp__|mcp tool error|validation errors for call\[|missing required argument|missing '\''(action|query|command)'\'' parameter|unexpected keyword argument|fetching (github\.com|https?://)|tool-progress|tool call'; then
+    if printf '%s' "$text" | grep -Eiq 'running:|searching memory|thinking|nodes_list|sessions_list|mcp__|mcp tool error|validation errors for call\[|missing required argument|missing '\''(action|query|command|name|pattern)'\''( parameter)?|unexpected keyword argument|fetching (github\.com|https?://)|tool-progress|tool call'; then
         return 1
     fi
 

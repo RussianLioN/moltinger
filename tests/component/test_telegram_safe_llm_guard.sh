@@ -3323,6 +3323,26 @@ EOF
         test_fail "BeforeLLMCall guard must fail-close generic log/root-cause maintenance turns even when the user omitted an explicit skill or codex-update subject"
     fi
 
+    test_start "component_before_llm_guard_hard_overrides_live_tool_broken_confirmation_turn"
+    local before_llm_tool_broken_confirmation_output
+    before_llm_tool_broken_confirmation_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$(secure_temp_dir telegram-safe-tool-broken-before)" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:tool-broken-confirmation","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Ты проверил, что инструменты сломаны? Убедился?"}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output" && \
+       jq -e '.data.messages | length == 2' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe maintenance hard override")' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output" && \
+       jq -e '.data.messages[0].content | contains("не провожу repair/debug/log inspection")' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output" && \
+       jq -e '.data.messages[1].content == "Верни в ответ ровно указанную в системном сообщении фразу. Не добавляй ничего."' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_tool_broken_confirmation_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must classify the live 'инструменты сломаны' confirmation as Telegram-safe maintenance instead of letting the model prove tool breakage"
+    fi
+
     test_start "component_before_llm_guard_direct_fastpaths_codex_update_maintenance_when_enabled"
     local fastpath_maintenance_tmp fastpath_maintenance_send_script fastpath_maintenance_log fastpath_maintenance_stdout fastpath_maintenance_stderr fastpath_maintenance_status fastpath_maintenance_intent_dir fastpath_maintenance_suppress_file
     fastpath_maintenance_tmp="$(secure_temp_dir telegram-safe-fastpath-maintenance)"
@@ -3404,6 +3424,23 @@ EOF
         test_pass
     else
         test_fail "MessageSending guard must rewrite leaked codex-update maintenance/debug runtime chatter into the deterministic Telegram-safe boundary reply"
+    fi
+
+    test_start "component_message_sending_guard_rewrites_live_plain_tool_runtime_diagnostic_chatter"
+    local plain_tool_runtime_diagnostic_output
+    plain_tool_runtime_diagnostic_output="$(
+        env PATH="$MINIMAL_PATH" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"MessageSending","session_id":"session:plain-tool-runtime-diagnostic","data":{"account_id":"moltis-bot","to":"262872984","reply_to_message_id":1435,"user_message":"Ты не можешь настроить отправку новости о новой версии один раз?","text":"Могу. Логика понятная: хранить `last_announced_version`, и если cron снова видит ту же версию — ничего не слать.\n\nНо прямо сейчас именно настроить сам я не могу, потому что в этой сессии инструменты сломаны: даже базовые вызовы чтения skill, памяти, cron и shell возвращают ошибки вида `missing 'name'`, `missing 'query'`, `missing 'action'`, `missing 'command'` при корректных аргументах."}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$plain_tool_runtime_diagnostic_output" && \
+       jq -e '.data.text | contains("не запускаю инструменты и не показываю внутренние логи")' >/dev/null 2>&1 <<<"$plain_tool_runtime_diagnostic_output" && \
+       jq -e '.data.reply_to_message_id == 1435' >/dev/null 2>&1 <<<"$plain_tool_runtime_diagnostic_output" && \
+       jq -e '.data.text | test("missing '\''name'\''|missing '\''query'\''|missing '\''action'\''|missing '\''command'\''|инструменты сломаны|read_skill|memory_search|cron|shell") | not' >/dev/null 2>&1 <<<"$plain_tool_runtime_diagnostic_output"; then
+        test_pass
+    else
+        test_fail "MessageSending guard must rewrite plain live tool-runtime diagnostic chatter even when the leaked text does not use the word parameter"
     fi
 
     test_start "component_message_sending_guard_rewrites_plain_skill_maintenance_runtime_failure"
