@@ -750,7 +750,7 @@ canonicalize_known_tool_arguments_json() {
 
     [[ -n "$tool_name" && -n "$arguments_json" ]] || return 1
     case "$arguments_json" in
-        *'"_channel"'*|*'"_session_key"'*|*':null'*|*': null'*)
+        *'"_channel"'*|*'"_session_key"'*|*'"body"'*|*'"allowed_tools"'*|*':null'*|*': null'*)
             ;;
         *)
             return 1
@@ -785,7 +785,7 @@ requirements = {
     "browser": ("string", "action"),
     "create_skill": ("string", "name"),
     "update_skill": ("string", "name"),
-    "patch_skill": ("all_strings", ("name", "instructions")),
+    "patch_skill": ("skill_patch", None),
     "delete_skill": ("string", "name"),
     "write_skill_files": ("name_and_files", None),
     "mcp__tavily__tavily_search": ("string", "query"),
@@ -805,6 +805,13 @@ if kind == "string":
 elif kind == "all_strings":
     if not all(nonempty_string(args.get(key)) for key in spec):
         raise SystemExit(1)
+elif kind == "skill_patch":
+    patches = args.get("patches")
+    has_patches = isinstance(patches, list) and any(isinstance(item, dict) for item in patches)
+    has_legacy_instructions = nonempty_string(args.get("instructions"))
+    has_description = nonempty_string(args.get("description"))
+    if not nonempty_string(args.get("name")) or not (has_patches or has_legacy_instructions or has_description):
+        raise SystemExit(1)
 elif kind == "name_and_files":
     files = args.get("files")
     if not nonempty_string(args.get("name")) or not isinstance(files, list):
@@ -815,6 +822,29 @@ else:
     raise SystemExit(1)
 
 changed = False
+
+if tool in {"create_skill", "update_skill"} and nonempty_string(args.get("body")):
+    if not nonempty_string(args.get("content")):
+        args["content"] = args.get("body")
+    del args["body"]
+    changed = True
+
+allowed_keys = {
+    "read_skill": {"name"},
+    "memory_search": {"query", "limit", "filter"},
+    "exec": {"command", "timeout", "working_dir"},
+    "cron": {"action", "limit", "id", "job"},
+    "process": {"action", "id"},
+    "Glob": {"path", "pattern", "exclude"},
+    "web_fetch": {"url", "extract_mode", "max_chars", "selector"},
+    "browser": {"action", "url", "session_id"},
+    "create_skill": {"name", "content", "description"},
+    "update_skill": {"name", "content", "description"},
+    "patch_skill": {"name", "patches", "description", "instructions"},
+    "delete_skill": {"name"},
+    "write_skill_files": {"name", "files"},
+    "mcp__tavily__tavily_search": {"query", "topic", "max_results"},
+}
 
 def clean(value):
     global changed
@@ -842,6 +872,14 @@ def clean(value):
     return value
 
 cleaned_args = clean(args)
+if tool in allowed_keys and isinstance(cleaned_args, dict):
+    filtered_args = {}
+    for key, value in cleaned_args.items():
+        if key in allowed_keys[tool]:
+            filtered_args[key] = value
+        else:
+            changed = True
+    cleaned_args = filtered_args
 if not changed:
     raise SystemExit(1)
 
@@ -2194,6 +2232,8 @@ build_skill_authoring_guard_message() {
 Telegram-safe skill-authoring contract:
 - Для skill visibility/create/update/patch/delete не используй browser, web-search, Tavily, exec и filesystem-пробы как primary path.
 - Допустимые tool paths для такого хода: create_skill, update_skill, patch_skill, delete_skill, write_skill_files, session_state, send_message, send_image.
+- Используй official skill tool schema: create_skill -> name + content (+ optional description), update_skill -> name + content, patch_skill -> name + patches array ({find, replace}) и optional description, delete_skill -> name, write_skill_files -> name + files.
+- Не используй legacy поля `body`, `allowed_tools` и `instructions` для новых вызовов skill tools.
 - Если runtime snapshot недоступен, не делай вывод "навыков нет"; скажи, что sandbox filesystem не является доказательством отсутствия навыка.
 - Если create_skill, update_skill, patch_skill или write_skill_files вернул validation/frontmatter error, кратко объясни ошибку и повтори попытку с валидным SKILL.md.
 - Если пользователь спрашивает именно про template/шаблон навыка, покажи канонический минимальный scaffold из project docs, а не ищи его через workspace, skills directory или existing skills.
@@ -2226,7 +2266,7 @@ Telegram-safe sparse create-skill override:
 - Первый содержательный ход обязан быть create_skill.
 - Не задавай уточняющих вопросов до первой попытки create_skill.
 - Не ищи template, не смотри existing skills, не проверяй filesystem/directories и не используй exec/browser/web-search.
-- Для create_skill сам сгенерируй description и content.
+- Для create_skill сам сгенерируй description и content. Не используй legacy поле body.
 - Content должен быть валидным минимальным SKILL.md со структурой:
   ---
   name: <skill-name>
@@ -3032,6 +3072,320 @@ runtime_skill_file_path() {
     printf '%s/%s/SKILL.md' "$runtime_root" "$skill_name"
 }
 
+tool_calls_only_direct_skill_crud_supported() {
+    local tool_calls_json="${1:-}"
+    local tool_name=""
+    local saw_name=false
+
+    [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        saw_name=true
+        case "$tool_name" in
+            create_skill|update_skill|patch_skill|delete_skill|write_skill_files)
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    [[ "$saw_name" == true ]]
+}
+
+execute_direct_skill_tool_calls_json() {
+    local tool_calls_json="${1:-}"
+    local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
+
+    [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+
+    DIRECT_SKILL_TOOL_CALLS_JSON="$tool_calls_json" \
+    MOLTIS_RUNTIME_SKILLS_ROOT="$runtime_root" \
+    python3 - <<'PY'
+import json
+import os
+import re
+import shutil
+from pathlib import Path
+
+tool_calls_raw = os.environ.get("DIRECT_SKILL_TOOL_CALLS_JSON", "")
+runtime_root = Path(os.environ.get("MOLTIS_RUNTIME_SKILLS_ROOT", "/home/moltis/.moltis/skills"))
+
+try:
+    tool_calls = json.loads(tool_calls_raw)
+except Exception:
+    raise SystemExit(1)
+
+if not isinstance(tool_calls, list) or not tool_calls:
+    raise SystemExit(1)
+
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+def nonempty_string(value):
+    return isinstance(value, str) and bool(value.strip())
+
+def valid_skill_name(name):
+    return nonempty_string(name) and NAME_RE.match(name.strip()) is not None
+
+def skill_dir(name):
+    return runtime_root / name
+
+def skill_file(name):
+    return skill_dir(name) / "SKILL.md"
+
+def minimal_scaffold(name, description=None):
+    description = (description or f"Базовый навык {name}. Использовать, когда пользователь явно просит сценарий {name}.").strip()
+    return (
+        f"---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        f"---\n"
+        f"# {name}\n\n"
+        f"## Активация\n"
+        f"Когда пользователь явно просит сценарий {name} или доработку этого навыка, используй его.\n\n"
+        f"## Workflow\n"
+        f"1. Уточни цель, если для точного выполнения не хватает контекста.\n"
+        f"2. Выполни основной сценарий навыка.\n"
+        f"3. Верни краткий итог и предложи, как доработать навык дальше.\n\n"
+        f"## Templates\n"
+        f"- TODO: добавить конкретные шаблоны под сценарий навыка.\n"
+    )
+
+def read_text(path):
+    return path.read_text(encoding="utf-8")
+
+def write_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    normalized = text if text.endswith("\n") else text + "\n"
+    path.write_text(normalized, encoding="utf-8")
+
+def split_frontmatter(text):
+    if text.startswith("---\n"):
+        marker = "\n---\n"
+        idx = text.find(marker, 4)
+        if idx != -1:
+            return text[4:idx], text[idx + len(marker):]
+        marker = "\n---"
+        idx = text.find(marker, 4)
+        if idx != -1:
+            return text[4:idx], text[idx + len(marker):].lstrip("\n")
+    return None, text
+
+def upsert_description(text, name, description):
+    frontmatter, body = split_frontmatter(text)
+    if frontmatter is None:
+        return minimal_scaffold(name, description)
+
+    lines = frontmatter.splitlines()
+    updated = []
+    found_name = False
+    found_description = False
+    for line in lines:
+        if line.startswith("name:"):
+            updated.append(f"name: {name}")
+            found_name = True
+        elif line.startswith("description:"):
+            updated.append(f"description: {description}")
+            found_description = True
+        else:
+            updated.append(line)
+    if not found_name:
+        updated.insert(0, f"name: {name}")
+    if not found_description:
+        insert_at = 1 if updated and updated[0].startswith("name:") else 0
+        updated.insert(insert_at, f"description: {description}")
+    return "---\n" + "\n".join(updated).rstrip() + "\n---\n" + body.lstrip("\n")
+
+def apply_patches(text, patches):
+    updated = text
+    for index, patch in enumerate(patches, start=1):
+        if not isinstance(patch, dict):
+            raise ValueError(f"patch #{index} must be an object")
+        find = patch.get("find")
+        replace = patch.get("replace", "")
+        if not nonempty_string(find):
+            raise ValueError(f"patch #{index} must contain non-empty `find`")
+        if not isinstance(replace, str):
+            raise ValueError(f"patch #{index} must contain string `replace`")
+        if find not in updated:
+            raise ValueError(f"patch #{index} did not match current skill content")
+        updated = updated.replace(find, replace, 1)
+    return updated
+
+def resolve_skill_relative_path(name, relative_path):
+    if not nonempty_string(relative_path):
+        raise ValueError("file entry must contain non-empty `path`")
+    if relative_path.startswith("/"):
+        raise ValueError("file path must be relative to the skill directory")
+    candidate = skill_dir(name) / relative_path
+    resolved = candidate.resolve()
+    root = skill_dir(name).resolve()
+    if resolved != root and root not in resolved.parents:
+        raise ValueError("file path escapes the skill directory")
+    return resolved
+
+def canonical_content(args, name):
+    content = args.get("content")
+    if not nonempty_string(content):
+        content = args.get("body")
+    if nonempty_string(content):
+        return content.strip()
+    description = args.get("description") if nonempty_string(args.get("description")) else None
+    return minimal_scaffold(name, description)
+
+operations = []
+errors = []
+runtime_root.mkdir(parents=True, exist_ok=True)
+
+for entry in tool_calls:
+    if not isinstance(entry, dict):
+        errors.append("tool call entry must be an object")
+        break
+
+    tool_name = entry.get("name")
+    args = entry.get("arguments") or {}
+    if not isinstance(args, dict):
+        errors.append(f"{tool_name or 'unknown'}: arguments must be an object")
+        break
+
+    name = (args.get("name") or "").strip()
+    if tool_name not in {"create_skill", "update_skill", "patch_skill", "delete_skill", "write_skill_files"}:
+        errors.append(f"unsupported tool in direct skill execution: {tool_name}")
+        break
+    if not valid_skill_name(name):
+        errors.append(f"{tool_name}: нужен корректный slug навыка")
+        break
+
+    try:
+        if tool_name == "create_skill":
+            path = skill_file(name)
+            if path.exists():
+                operations.append({"name": tool_name, "skill": name, "state": "exists"})
+            else:
+                write_text(path, canonical_content(args, name))
+                operations.append({"name": tool_name, "skill": name, "state": "created"})
+
+        elif tool_name == "update_skill":
+            path = skill_file(name)
+            if not path.exists():
+                raise ValueError("навык ещё не существует")
+            if nonempty_string(args.get("content")) or nonempty_string(args.get("body")):
+                write_text(path, canonical_content(args, name))
+            elif nonempty_string(args.get("description")):
+                updated = upsert_description(read_text(path), name, args["description"].strip())
+                write_text(path, updated)
+            else:
+                raise ValueError("update_skill требует `content` или хотя бы `description`")
+            operations.append({"name": tool_name, "skill": name, "state": "updated"})
+
+        elif tool_name == "patch_skill":
+            path = skill_file(name)
+            if not path.exists():
+                raise ValueError("навык ещё не существует")
+            text = read_text(path)
+            if nonempty_string(args.get("description")):
+                text = upsert_description(text, name, args["description"].strip())
+            patches = args.get("patches")
+            if isinstance(patches, list) and patches:
+                text = apply_patches(text, patches)
+            elif nonempty_string(args.get("instructions")):
+                raise ValueError("patch_skill теперь требует массив `patches` по official contract, а не legacy `instructions`")
+            elif not nonempty_string(args.get("description")):
+                raise ValueError("patch_skill требует `patches` или хотя бы `description`")
+            write_text(path, text)
+            operations.append({"name": tool_name, "skill": name, "state": "patched"})
+
+        elif tool_name == "delete_skill":
+            target_dir = skill_dir(name)
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+                operations.append({"name": tool_name, "skill": name, "state": "deleted"})
+            else:
+                operations.append({"name": tool_name, "skill": name, "state": "already_absent"})
+
+        elif tool_name == "write_skill_files":
+            files = args.get("files")
+            if not isinstance(files, list) or not any(isinstance(item, dict) for item in files):
+                raise ValueError("write_skill_files требует непустой массив `files`")
+            written = 0
+            for item in files:
+                if not isinstance(item, dict):
+                    raise ValueError("каждый элемент `files` должен быть объектом")
+                target = resolve_skill_relative_path(name, item.get("path", ""))
+                content = item.get("content", "")
+                if not isinstance(content, str):
+                    raise ValueError("поле `content` в files должно быть строкой")
+                write_text(target, content)
+                written += 1
+            operations.append({"name": tool_name, "skill": name, "state": "files_written", "count": written})
+
+    except Exception as exc:
+        errors.append(f"{tool_name} `{name}`: {exc}")
+        break
+
+skills = []
+for op in operations:
+    skill = op.get("skill")
+    if skill and skill not in skills:
+        skills.append(skill)
+
+primary_skill = skills[0] if skills else ""
+created = any(op["name"] == "create_skill" and op["state"] == "created" for op in operations)
+exists = any(op["name"] == "create_skill" and op["state"] == "exists" for op in operations)
+mutated = any(op["name"] in {"update_skill", "patch_skill"} for op in operations)
+wrote_files = any(op["name"] == "write_skill_files" for op in operations)
+deleted = any(op["name"] == "delete_skill" and op["state"] == "deleted" for op in operations)
+already_absent = any(op["name"] == "delete_skill" and op["state"] == "already_absent" for op in operations)
+
+if errors:
+    reply_text = "Не смог применить правку навыка: " + errors[0]
+    status = "error"
+elif len(skills) > 1:
+    reply_text = "Выполнил операции с навыками: " + ", ".join(f"`{item}`" for item in skills) + "."
+    status = "ok"
+elif deleted:
+    reply_text = f"Удалил навык `{primary_skill}`."
+    status = "ok"
+elif already_absent:
+    reply_text = f"Навык `{primary_skill}` уже отсутствует."
+    status = "ok"
+elif created and (mutated or wrote_files):
+    reply_text = f"Создал навык `{primary_skill}` и сразу доработал его."
+    status = "ok"
+elif created:
+    reply_text = f"Создал базовый шаблон навыка `{primary_skill}`. Могу следующим сообщением доработать описание, workflow и templates."
+    status = "ok"
+elif exists and (mutated or wrote_files):
+    reply_text = f"Навык `{primary_skill}` уже существовал, я обновил его."
+    status = "ok"
+elif exists:
+    reply_text = f"Навык `{primary_skill}` уже существует. Могу следующим сообщением обновить его или показать текущий шаблон."
+    status = "ok"
+elif mutated and wrote_files:
+    reply_text = f"Обновил навык `{primary_skill}` и записал дополнительные файлы."
+    status = "ok"
+elif mutated:
+    reply_text = f"Обновил навык `{primary_skill}`."
+    status = "ok"
+elif wrote_files:
+    reply_text = f"Записал дополнительные файлы навыка `{primary_skill}`."
+    status = "ok"
+else:
+    reply_text = ""
+    status = "noop"
+
+print(json.dumps({
+    "status": status,
+    "reply_text": reply_text,
+    "primary_skill": primary_skill,
+    "skills_csv": ",".join(skills),
+    "operations_csv": ",".join(op["name"] for op in operations),
+}, ensure_ascii=False, separators=(",", ":")))
+PY
+}
+
 build_skill_detail_reply_text() {
     local requested_name="${1:-}"
     local resolved_name="${2:-}"
@@ -3792,7 +4146,9 @@ tool_call_has_missing_required_arguments() {
             ;;
         patch_skill)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name" || \
-            ! json_string_field_present_and_nonempty_from_text "$arguments_json" "instructions"
+            { ! json_array_field_has_object_entries_from_text "$arguments_json" "patches" && \
+              ! json_string_field_present_and_nonempty_from_text "$arguments_json" "instructions" && \
+              ! json_string_field_present_and_nonempty_from_text "$arguments_json" "description"; }
             ;;
         delete_skill)
             ! json_string_field_present_and_nonempty_from_text "$arguments_json" "name"
@@ -5152,6 +5508,39 @@ if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$
     write_audit_line "emit_modify event=$event reason=direct_fastpath_delivery_suppress token=$effective_delivery_suppression"
     emit_modified_payload "NO_REPLY" false
     exit 0
+fi
+
+if [[ "$event" == "AfterLLMCall" && "$is_telegram_safe_lane" == true ]] && \
+   flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -x "$DIRECT_SEND_SCRIPT" ]] && \
+   current_turn_requires_native_skill_tools_only && \
+   tool_calls_only_direct_skill_crud_supported "$tool_calls_json"; then
+    telegram_chat_id="${system_chat_id:-${current_chat_id:-}}"
+    if [[ -n "$telegram_chat_id" ]]; then
+        direct_skill_crud_result_json="$(execute_direct_skill_tool_calls_json "$tool_calls_json" || true)"
+        direct_skill_crud_status="$(extract_json_string_field_from_text "${direct_skill_crud_result_json:-}" "status" || true)"
+        direct_skill_crud_reply_text="$(extract_json_string_field_from_text "${direct_skill_crud_result_json:-}" "reply_text" || true)"
+        direct_skill_crud_primary_skill="$(extract_json_string_field_from_text "${direct_skill_crud_result_json:-}" "primary_skill" || true)"
+        direct_skill_crud_skills_csv="$(extract_json_string_field_from_text "${direct_skill_crud_result_json:-}" "skills_csv" || true)"
+        direct_skill_crud_operations_csv="$(extract_json_string_field_from_text "${direct_skill_crud_result_json:-}" "operations_csv" || true)"
+
+        if [[ "$direct_skill_crud_status" != "noop" && -n "$direct_skill_crud_reply_text" ]]; then
+            direct_skill_crud_token="skill_native_crud:${direct_skill_crud_primary_skill:-generic}"
+            if [[ "$direct_skill_crud_status" == "error" ]]; then
+                direct_skill_crud_token="skill_native_crud_error:${direct_skill_crud_primary_skill:-generic}"
+            fi
+            if direct_fastpath_send_with_suppression \
+                "skill_native_crud" \
+                "$telegram_chat_id" \
+                "$direct_skill_crud_reply_text" \
+                "$direct_skill_crud_token" \
+                "status=$direct_skill_crud_status skills=${direct_skill_crud_skills_csv:-none} ops=${direct_skill_crud_operations_csv:-none}"; then
+                clear_turn_intent "${turn_session_key:-}"
+                write_audit_line "after_llm_direct_skill_crud status=$direct_skill_crud_status chat_id=$telegram_chat_id skill=${direct_skill_crud_primary_skill:-generic} ops=${direct_skill_crud_operations_csv:-none}"
+                emit_modified_payload "" true
+                exit 0
+            fi
+        fi
+    fi
 fi
 
 if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then

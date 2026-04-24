@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 91
+**Total Lessons**: 92
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (44 lessons)
+#### P1 (45 lessons)
+- [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram Web probe collapsed multiline /status replies before exact semantic review](../docs/rca/2026-04-23-telegram-web-probe-collapsed-multiline-status-contract.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
@@ -195,7 +196,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (7 lessons)
+#### product (8 lessons)
+- [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
 - [Telegram-safe maintenance turns fell into upstream tool-boundary errors](../docs/rca/2026-04-20-telegram-safe-maintenance-turns-fell-into-upstream-tool-boundary-errors.md)
@@ -226,15 +228,15 @@
 
 ### Popular Tags
 
-- `rca` (37 lessons)
+- `rca` (38 lessons)
+- `telegram` (28 lessons)
 - `moltis` (28 lessons)
-- `telegram` (27 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `skills` (14 lessons)
-- `hooks` (12 lessons)
+- `skills` (15 lessons)
+- `hooks` (13 lessons)
 - `beads` (12 lessons)
 
 
@@ -244,10 +246,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 91 |
-| Critical (P0/P1) | 45 |
+| Total Lessons | 92 |
+| Critical (P0/P1) | 46 |
 | Categories | 8 |
-| Unique Tags | 177 |
+| Unique Tags | 180 |
 
 ---
 
