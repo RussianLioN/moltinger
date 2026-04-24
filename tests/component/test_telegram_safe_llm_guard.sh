@@ -966,11 +966,76 @@ EOF
        grep -Fq $'\tcodex_update:scheduler' "$codex_schedule_phrase_session_suppress" && \
        grep -Fq $'\tcodex_update:scheduler' "$codex_schedule_phrase_chat_suppress" && \
        grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$codex_schedule_phrase_log" && \
+       grep -Fq 'каждые 6 часов' "$codex_schedule_phrase_log" && \
        grep -Fq 'операторский/runtime check' "$codex_schedule_phrase_log" && \
        ! grep -Fq 'После исправлений схема такая' "$codex_schedule_phrase_log"; then
         test_pass
     else
         test_fail "An explicit schedule phrasing for codex-update must stay on the scheduler contract instead of drifting into the context reply"
+    fi
+
+    test_start "component_message_received_direct_fastpath_routes_live_frequency_phrase_to_codex_update_scheduler_contract"
+    local codex_frequency_phrase_tmp codex_frequency_phrase_send_script codex_frequency_phrase_log codex_frequency_phrase_stdout codex_frequency_phrase_stderr
+    local codex_frequency_phrase_status codex_frequency_phrase_intent_dir codex_frequency_phrase_session_suppress codex_frequency_phrase_chat_suppress
+    codex_frequency_phrase_tmp="$(secure_temp_dir telegram-safe-codex-frequency-phrase)"
+    codex_frequency_phrase_send_script="$codex_frequency_phrase_tmp/send.sh"
+    codex_frequency_phrase_log="$codex_frequency_phrase_tmp/send.log"
+    codex_frequency_phrase_intent_dir="$codex_frequency_phrase_tmp/intent"
+    codex_frequency_phrase_session_suppress="$codex_frequency_phrase_intent_dir/session_codexfrequencyphrase.suppress"
+    codex_frequency_phrase_chat_suppress="$codex_frequency_phrase_intent_dir/chat-262872985.suppress"
+    cat >"$codex_frequency_phrase_send_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+chat_id=""
+text=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chat-id)
+            chat_id="${2:-}"
+            shift 2
+            ;;
+        --text)
+            text="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+printf 'chat_id=%s\ntext=%s\n' "$chat_id" "$text" >"$FASTPATH_LOG"
+printf '{"ok":true}\n'
+EOF
+    chmod +x "$codex_frequency_phrase_send_script"
+    codex_frequency_phrase_stdout="$codex_frequency_phrase_tmp/stdout.log"
+    codex_frequency_phrase_stderr="$codex_frequency_phrase_tmp/stderr.log"
+    set +e
+    env PATH="$MINIMAL_PATH" \
+        FASTPATH_LOG="$codex_frequency_phrase_log" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$codex_frequency_phrase_intent_dir" \
+        MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$codex_frequency_phrase_send_script" \
+        MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" \
+        bash "$HOOK_HANDLER" >"$codex_frequency_phrase_stdout" 2>"$codex_frequency_phrase_stderr" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:codexfrequencyphrase","provider":"openai-codex","model":"gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872985 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Как часто обновляется навык codex-update?"}],"tool_count":37,"iteration":1}}
+EOF
+    codex_frequency_phrase_status=$?
+    set -e
+    if [[ "$codex_frequency_phrase_status" -eq 0 ]] && \
+       [[ ! -s "$codex_frequency_phrase_stderr" ]] && \
+       jq -e '.action == "block"' >/dev/null 2>&1 "$codex_frequency_phrase_stdout" && \
+       [[ -f "$codex_frequency_phrase_session_suppress" ]] && \
+       [[ -f "$codex_frequency_phrase_chat_suppress" ]] && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_frequency_phrase_session_suppress" && \
+       grep -Fq $'\tcodex_update:scheduler' "$codex_frequency_phrase_chat_suppress" && \
+       grep -Fq 'scheduler path для регулярной проверки обновлений Codex CLI' "$codex_frequency_phrase_log" && \
+       grep -Fq 'каждые 6 часов' "$codex_frequency_phrase_log" && \
+       grep -Fq 'операторский/runtime check' "$codex_frequency_phrase_log" && \
+       ! grep -Fq 'После исправлений схема такая' "$codex_frequency_phrase_log"; then
+        test_pass
+    else
+        test_fail "The exact live frequency phrasing for codex-update must route to the scheduler contract instead of generic skill-detail or release wording"
     fi
 
     test_start "component_codex_update_direct_fastpath_handles_array_message_content_from_live_payload"
@@ -1319,7 +1384,7 @@ EOF
     codex_terminal_marker="$codex_terminal_intent_dir/session_codex-terminal.terminal"
     codex_terminal_session_suppress="$codex_terminal_intent_dir/session_codex-terminal.suppress"
     codex_terminal_chat_suppress="$codex_terminal_intent_dir/chat-262872984.suppress"
-    codex_terminal_reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.'
+    codex_terminal_reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.'
     codex_terminal_before_output="$(
         env PATH="$MINIMAL_PATH" \
             MOLTIS_CODEX_UPDATE_RELEASE_JSON='{"tag_name":"0.118.0","published_at":"2026-04-01T12:00:00Z"}' \
@@ -2400,7 +2465,7 @@ EOF
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
-       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
        jq -e '.data.account_id == "moltis-bot"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
        jq -e '.data.to == "262872984"' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output" && \
        jq -e '.data.reply_to_message_id == 1295' >/dev/null 2>&1 <<<"$clean_codex_update_scheduler_output"; then
@@ -2438,7 +2503,7 @@ EOF
     if [[ "$dirty_codex_update_scheduler_status" -eq 0 ]] && \
        [[ ! -s "$dirty_codex_update_scheduler_stderr" ]] && \
        jq -e '.action == "modify"' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
-       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
        jq -e '.data.reply_to_message_id == 1296' >/dev/null 2>&1 <"$dirty_codex_update_scheduler_stdout" && \
        [[ ! -s "$dirty_codex_update_scheduler_log" ]]; then
         test_pass
@@ -3810,7 +3875,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output" && \
-       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output"; then
+       jq -e '.data.text == "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search."' >/dev/null 2>&1 <<<"$after_llm_codex_update_scheduler_output"; then
         test_pass
     else
         test_fail "AfterLLMCall guard must rewrite a clean codex-update scheduler false negative into the canonical deterministic reply"
@@ -4429,6 +4494,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
        jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
+       jq -e '.data.text | contains("каждые 6 часов")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
        jq -e '.data.text | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
        jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$codex_update_scheduler_after_output" && \
@@ -4470,6 +4536,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
        jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
+       jq -e '.data.text | contains("каждые 6 часов")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
        jq -e '.data.text | contains("не подтверждаю по памяти")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
        jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
        jq -e '.data.reply_to_message_id == 964' >/dev/null 2>&1 <<<"$codex_update_scheduler_message_output" && \
@@ -4493,6 +4560,7 @@ EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
        jq -e '.data.text | contains("scheduler path для регулярной проверки обновлений Codex CLI")' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
+       jq -e '.data.text | contains("каждые 6 часов")' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
        jq -e '.data.text | contains("операторский/runtime check")' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
        jq -e '.data.reply_to_message_id == 966' >/dev/null 2>&1 <<<"$codex_update_stale_context_output" && \
        jq -e '.data.text | test("После исправлений схема такая|last_alert_fingerprint|suppressed") | not' >/dev/null 2>&1 <<<"$codex_update_stale_context_output"; then
