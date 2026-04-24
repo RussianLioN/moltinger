@@ -241,12 +241,56 @@ reply_has_host_path_leak() {
   return 1
 }
 
+text_matches_extended_regex() {
+  local text="${1:-}"
+  local pattern="${2:-}"
+  local perl_status=0
+
+  [[ -n "$text" && -n "$pattern" ]] || return 1
+
+  if command -v perl >/dev/null 2>&1; then
+    TEXT_MATCH_TEXT="$text" TEXT_MATCH_PATTERN="$pattern" \
+      perl -CSDA -MEncode=decode,FB_CROAK -e '
+        use strict;
+        use warnings;
+        use utf8;
+
+        my $raw_text = $ENV{TEXT_MATCH_TEXT} // q();
+        my $raw_pattern = $ENV{TEXT_MATCH_PATTERN} // q();
+        exit 2 unless length $raw_pattern;
+
+        my ($text, $pattern) = eval {
+          (
+            decode("UTF-8", $raw_text, FB_CROAK),
+            decode("UTF-8", $raw_pattern, FB_CROAK),
+          );
+        };
+        exit 2 if $@;
+
+        my $matched = eval {
+          my $re = qr{$pattern}iu;
+          $text =~ $re ? 1 : 0;
+        };
+        exit 2 if $@;
+        exit($matched ? 0 : 1);
+      '
+    perl_status=$?
+    case "$perl_status" in
+      0|1)
+        return "$perl_status"
+        ;;
+    esac
+  fi
+
+  printf '%s' "$text" | grep -Eiq "$pattern"
+}
+
 message_is_skill_create_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  if printf '%s' "$normalized" | grep -Eiq '(созда(й|йте|дим|ть|вать)|создать|создай|создадим|create|build|make).{0,40}(навык|skill)|(навык|skill).{0,24}(созда|create)'; then
+  if printf '%s' "$normalized" | grep -Eiq '(([Сс]оздай|[Сс]оздайте|[Сс]оздадим|[Сс]оздать|[Cc]reate|[Bb]uild|[Mm]ake).{0,40}(навык|skill))|((навык|skill).{0,24}([Сс]оздай|[Сс]оздать|[Сс]оздадим|[Cc]reate|[Bb]uild|[Mm]ake))'; then
     return 0
   fi
 
@@ -255,7 +299,7 @@ message_is_skill_create_query() {
 
 message_is_skill_mutation_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   if message_is_skill_create_query "$normalized" || message_is_skill_update_query "$normalized" || message_is_skill_delete_query "$normalized"; then
@@ -289,7 +333,7 @@ message_has_english_action_token() {
 
 message_is_skill_update_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   if message_is_skill_create_query "$normalized"; then
@@ -304,7 +348,7 @@ message_is_skill_update_query() {
     return 1
   fi
 
-  if printf '%s' "$normalized" | grep -Eiq '((обнови([[:space:]]|$)|обновить[[:space:]]|обновите[[:space:]]|обновим[[:space:]]|обновляй[[:space:]]|измени([[:space:]]|$)|изменить[[:space:]]|измените[[:space:]]|изменим[[:space:]]|редактируй[[:space:]]|редактировать[[:space:]]|редактируйте[[:space:]]|перепиши([[:space:]]|$)|переписать[[:space:]]|перепишите[[:space:]]|патч[[:space:]]|патчить[[:space:]]).{0,40}(навык|skill))|((навык|skill).{0,24}(обнови([[:space:]]|$)|обновить[[:space:]]|обновите[[:space:]]|обновим[[:space:]]|обновляй[[:space:]]|измени([[:space:]]|$)|изменить[[:space:]]|измените[[:space:]]|изменим[[:space:]]|редактируй[[:space:]]|редактировать[[:space:]]|редактируйте[[:space:]]|перепиши([[:space:]]|$)|переписать[[:space:]]|перепишите[[:space:]]|патч[[:space:]]|патчить[[:space:]]))'; then
+  if printf '%s' "$normalized" | grep -Eiq '((([Оо]бнови([[:space:]]|$)|[Оо]бновить[[:space:]]|[Оо]бновите[[:space:]]|[Оо]бновим[[:space:]]|[Оо]бновляй[[:space:]]|[Ии]змени([[:space:]]|$)|[Ии]зменить[[:space:]]|[Ии]змените[[:space:]]|[Ии]зменим[[:space:]]|[Рр]едактируй[[:space:]]|[Рр]едактировать[[:space:]]|[Рр]едактируйте[[:space:]]|[Пп]ерепиши([[:space:]]|$)|[Пп]ереписать[[:space:]]|[Пп]ерепишите[[:space:]]|[Пп]атч[[:space:]]|[Пп]атчить[[:space:]]).{0,40}(навык|skill)))|(((навык|skill).{0,24}([Оо]бнови([[:space:]]|$)|[Оо]бновить[[:space:]]|[Оо]бновите[[:space:]]|[Оо]бновим[[:space:]]|[Оо]бновляй[[:space:]]|[Ии]змени([[:space:]]|$)|[Ии]зменить[[:space:]]|[Ии]змените[[:space:]]|[Ии]зменим[[:space:]]|[Рр]едактируй[[:space:]]|[Рр]едактировать[[:space:]]|[Рр]едактируйте[[:space:]]|[Пп]ерепиши([[:space:]]|$)|[Пп]ереписать[[:space:]]|[Пп]ерепишите[[:space:]]|[Пп]атч[[:space:]]|[Пп]атчить[[:space:]])))'; then
     return 0
   fi
 
@@ -321,14 +365,14 @@ message_is_skill_update_query() {
 
 message_is_skill_delete_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   if message_is_skill_create_query "$normalized"; then
     return 1
   fi
 
-  if printf '%s' "$normalized" | grep -Eiq '(удал(и|ить|ите|им|яй|ять)|delete|remove).{0,40}(навык|skill)|(навык|skill).{0,24}(удал|delete|remove)'; then
+  if printf '%s' "$normalized" | grep -Eiq '(([Уу]дали|[Уу]далить|[Уу]далите|[Уу]далим|[Уу]даляй|[Уу]далять|[Dd]elete|[Rr]emove).{0,40}(навык|skill))|((навык|skill).{0,24}([Уу]дали|[Уу]далить|[Уу]далите|[Уу]далим|[Уу]даляй|[Уу]далять|[Dd]elete|[Rr]emove))'; then
     return 0
   fi
 
@@ -425,6 +469,30 @@ extract_requested_skill_name() {
       return 1
       ;;
   esac
+
+  if command -v perl >/dev/null 2>&1; then
+    candidate="$(
+      SKILL_TOKEN_RAW="$candidate" \
+        perl -CSDA -e '
+          use strict;
+          use warnings;
+          use utf8;
+
+          my $value = $ENV{SKILL_TOKEN_RAW} // q();
+          $value =~ s/\s+$//;
+          $value =~ s/[.,;:!?)}\]»"'"'"'`]+$//;
+          print $value;
+        '
+    )" || true
+  fi
+
+  if [[ -z "$candidate" ]]; then
+    return 1
+  fi
+
+  candidate="$(printf '%s' "$candidate" | sed 's/[[:space:]]*$//; s/[.,;:!?)}\]"\x27`»]*$//')"
+
+  [[ -n "$candidate" ]] || return 1
 
   printf '%s\n' "$candidate"
   return 0
@@ -720,39 +788,27 @@ fail_skill_semantics_when_api_unavailable() {
 
 message_is_codex_update_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
-  case "$normalized" in
-    *"codex"*|*"кодекс"*)
-      return 0
-      ;;
-  esac
-
-  return 1
+  text_matches_extended_regex "$normalized" '(codex|кодекс)'
 }
 
 message_is_codex_update_scheduler_query() {
   local normalized
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   if ! message_is_codex_update_query "$normalized"; then
     return 1
   fi
 
-  case "$normalized" in
-    *"крон"*|*"cron"*|*"scheduler"*|*"schedule"*|*"расписан"*|*"расписанию"*|*"регулярн"*|*"автопровер"*|*"автоматич"*|*"watcher"*|*"монитор"*|*"периодич"*|*"daemon"*|*"демон"*|*"каждые"*)
-      return 0
-      ;;
-  esac
-
-  return 1
+  text_matches_extended_regex "$normalized" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'
 }
 
 message_is_codex_update_context_query() {
   local normalized has_subject=false
-  normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  normalized="$(normalize_message_text "${1:-}")"
   [[ -n "$normalized" ]] || return 1
 
   if message_is_codex_update_query "$normalized"; then
@@ -771,7 +827,7 @@ message_is_codex_update_context_query() {
     return 1
   fi
 
-  if printf '%s' "$normalized" | grep -Eiq '((почему|зачем).{0,80}(раньше|ранее|до этого))|((три|несколько).{0,20}(раза|раз|подряд))|(дубл(ь|и|ями|ируются|ировались)?|повтор(но|ные|ял(ось|ись)?|яется|ялись)?)|(что[[:space:]]+(изменилось|поменялось))|(после[[:space:]]+исправлен)|((схема|логика).{0,40}работы)|((как|каким образом).{0,40}(сейчас[[:space:]]+)?работа(ет|ешь|ют|ет сейчас))|((как|каким образом).{0,40}(устроен|устроена))'; then
+  if text_matches_extended_regex "$normalized" '((почему|зачем).{0,80}(раньше|ранее|до этого))|((три|несколько).{0,20}(раза|раз|подряд))|(дубл(ь|и|ями|ируются|ировались)?|повтор(но|ные|ял(ось|ись)?|яется|ялись)?)|(что[[:space:]]+(изменилось|поменялось))|(после[[:space:]]+(исправлен|починк))|((схема|логика).{0,40}работы)|((как|каким образом).{0,40}(сейчас[[:space:]]+)?работа(ет|ешь|ют|ет сейчас))|((как|каким образом).{0,40}(устроен|устроена))'; then
     return 0
   fi
 

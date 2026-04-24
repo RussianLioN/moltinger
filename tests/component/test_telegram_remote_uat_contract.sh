@@ -2361,6 +2361,42 @@ run_component_telegram_remote_uat_contract_tests() {
         fi
     fi
 
+    test_start "component_telegram_remote_uat_fails_exact_live_duplicate_history_question_when_reply_falls_into_release_summary"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_context_release_summary_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Почему раньше ты присылал три одинаковых сообщения подряд про обновление Codex CLI?" \
+        --output "$TEST_TMPDIR/result-codex-update-context-duplicate-live.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must classify the exact live duplicate-history wording as a codex-update context question and fail if it drifts into a release summary"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_context_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-context-duplicate-live.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must fail the exact live duplicate-history wording with the codex-update context mismatch code"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_exact_live_post_fix_question_when_reply_falls_into_release_summary"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_context_release_summary_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Что изменилось в навыке codex-update после починки?" \
+        --output "$TEST_TMPDIR/result-codex-update-context-post-fix-live.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must classify the exact live post-fix wording as a codex-update context question and fail if it drifts into a release summary"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_context_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-context-post-fix-live.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must fail the exact live post-fix wording with the codex-update context mismatch code"
+        fi
+    fi
+
     test_start "component_telegram_remote_uat_fails_skill_visibility_false_negative_against_live_api_skills"
     if PATH="$TEST_TMPDIR:$PATH" \
         MOLTIS_PASSWORD=test-password \
@@ -2701,6 +2737,24 @@ run_component_telegram_remote_uat_contract_tests() {
         test_pass
     else
         test_fail "Authoritative wrapper must allow Telegram skill delete only when the target existed before send and disappears from live /api/skills after the reply"
+    fi
+
+    test_start "component_telegram_remote_uat_allows_skill_delete_for_exact_russian_prompt_with_trailing_period"
+    if PATH="$TEST_TMPDIR:$PATH" \
+        MOLTIS_PASSWORD=test-password \
+        SKILLS_API_ATTEMPTS=1 \
+        MOLTIS_CURL_STUB_COUNTER_FILE="$TEST_TMPDIR/curl-count-delete-trailing-dot" \
+        MOLTIS_CURL_STUB_MODE=delete_removed \
+        TELEGRAM_WEB_STUB_MODE=skill_delete_success_reply_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Удали навык codex-update." \
+        --output "$TEST_TMPDIR/result-skill-delete-trailing-dot.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must trim trailing sentence punctuation from the requested skill name for exact Russian delete prompts"
     fi
 
     test_start "component_telegram_remote_uat_fails_skill_delete_when_target_missing_before_send"
