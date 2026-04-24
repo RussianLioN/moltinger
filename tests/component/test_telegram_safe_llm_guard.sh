@@ -2953,8 +2953,8 @@ EOF
     )"
     before_tool_patch_output="$(
         run_hook_with_minimal_path \
-            '{"event":"BeforeToolCall","data":{"session_key":"session:tool-patch","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"patch_skill","arguments":{"name":"codex-update","instructions":"Уточни описание"}}}'
-    )"
+            '{"event":"BeforeToolCall","data":{"session_key":"session:tool-patch","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"patch_skill","arguments":{"name":"codex-update","patches":[{"find":"description: updated","replace":"description: refined"}]}}}'
+        )"
     before_tool_delete_output="$(
         run_hook_with_minimal_path \
             '{"event":"BeforeToolCall","data":{"session_key":"session:tool-delete","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"delete_skill","arguments":{"name":"codex-update-old"}}}'
@@ -2989,6 +2989,26 @@ EOF
         test_pass
     else
         test_fail "BeforeToolCall guard must normalize valid read_skill argument envelopes to the native tool instead of blocking or hiding them"
+    fi
+
+    test_start "component_before_tool_guard_canonicalizes_live_create_skill_envelope_with_content_alias"
+    local before_tool_create_skill_envelope_output
+    before_tool_create_skill_envelope_output="$(
+        run_hook_with_minimal_path \
+            '{"event":"BeforeToolCall","data":{"session_key":"session:create-skill-envelope","provider":"openai-codex","model":"openai-codex::gpt-5.4","tool":"create_skill","arguments":{"_channel":{"account_id":"moltis-bot","channel_type":"telegram","chat_id":"262872984"},"_session_key":"session:create-skill-envelope","name":"moltis-update-dialog","body":"---\nname: moltis-update-dialog\ndescription: demo\n---\n# moltis-update-dialog","description":"demo","allowed_tools":["exec"]}}}'
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.tool == "create_skill"' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments.name == "moltis-update-dialog"' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments.content | contains("name: moltis-update-dialog")' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments.description == "demo"' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments | has("body") | not' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments | has("allowed_tools") | not' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments | has("_channel") | not' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output" && \
+       jq -e '.data.arguments | has("_session_key") | not' >/dev/null 2>&1 <<<"$before_tool_create_skill_envelope_output"; then
+        test_pass
+    else
+        test_fail "BeforeToolCall guard must normalize live create_skill envelopes to the official content-based contract instead of forwarding legacy body/allowed_tools fields"
     fi
 
     test_start "component_before_tool_guard_canonicalizes_valid_runtime_tool_envelopes_to_original_tools"
@@ -3349,6 +3369,128 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must keep allowlisted create_skill tool calls reachable while replacing leaked internal planning with a safe progress line"
+    fi
+
+    test_start "component_after_llm_guard_direct_executes_native_skill_crud_when_direct_fastpath_is_available"
+    local after_skill_crud_direct_dir after_skill_crud_direct_runtime after_skill_crud_direct_send after_skill_crud_direct_log after_skill_crud_direct_output after_skill_crud_direct_skill_file after_skill_crud_direct_sidecar
+    after_skill_crud_direct_dir="$(secure_temp_dir telegram-safe-after-skill-crud-direct)"
+    after_skill_crud_direct_runtime="$after_skill_crud_direct_dir/runtime"
+    after_skill_crud_direct_send="$after_skill_crud_direct_dir/send.sh"
+    after_skill_crud_direct_log="$after_skill_crud_direct_dir/send.log"
+    after_skill_crud_direct_skill_file="$after_skill_crud_direct_runtime/moltis-update-dialog/SKILL.md"
+    after_skill_crud_direct_sidecar="$after_skill_crud_direct_runtime/moltis-update-dialog/notes.md"
+    cat >"$after_skill_crud_direct_send" <<'EOF'
+#!/usr/bin/env bash
+printf 'send %s\n' "$*" >>"$FASTPATH_LOG"
+exit 0
+EOF
+    chmod +x "$after_skill_crud_direct_send"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_direct_dir/intent" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:after-skill-crud-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык moltis-update-dialog для отслеживания новых версий Moltis и добавь заметку notes.md"}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_crud_direct_output="$(
+        env PATH="$MINIMAL_PATH:/usr/bin" \
+            FASTPATH_LOG="$after_skill_crud_direct_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$after_skill_crud_direct_runtime" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_skill_crud_direct_send" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_direct_dir/intent" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:after-skill-crud-direct","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык moltis-update-dialog для отслеживания новых версий Moltis и добавь заметку notes.md"}],"text":"Сначала создам навык, потом запишу notes.md.","tool_calls":[{"name":"create_skill","arguments":{"name":"moltis-update-dialog","body":"---\nname: moltis-update-dialog\ndescription: Следит за новыми версиями Moltis.\n---\n# moltis-update-dialog\n\n## Активация\nКогда пользователь просит следить за новыми версиями Moltis, используй навык.\n","description":"Следит за новыми версиями Moltis.","allowed_tools":["exec"]}},{"name":"write_skill_files","arguments":{"name":"moltis-update-dialog","files":[{"path":"notes.md","content":"watch Moltis releases"}]}}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_crud_direct_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_skill_crud_direct_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_crud_direct_output" && \
+       [[ -f "$after_skill_crud_direct_skill_file" ]] && \
+       [[ -f "$after_skill_crud_direct_sidecar" ]] && \
+       grep -Fq 'description: Следит за новыми версиями Moltis.' "$after_skill_crud_direct_skill_file" && \
+       grep -Fq 'watch Moltis releases' "$after_skill_crud_direct_sidecar" && \
+       grep -Fq -- '--chat-id 262872984' "$after_skill_crud_direct_log" && \
+       grep -Fq 'Создал навык `moltis-update-dialog` и сразу доработал его.' "$after_skill_crud_direct_log"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must directly execute Telegram-safe native skill CRUD, send one clean user-facing summary, and suppress the later raw tool tail"
+    fi
+
+    test_start "component_after_llm_guard_direct_executes_update_and_delete_skill_crud_when_direct_fastpath_is_available"
+    local after_skill_crud_edit_dir after_skill_crud_edit_runtime after_skill_crud_edit_send after_skill_crud_edit_log after_skill_crud_edit_update_output after_skill_crud_edit_delete_output after_skill_crud_edit_skill_file
+    after_skill_crud_edit_dir="$(secure_temp_dir telegram-safe-after-skill-crud-edit)"
+    after_skill_crud_edit_runtime="$after_skill_crud_edit_dir/runtime"
+    after_skill_crud_edit_send="$after_skill_crud_edit_dir/send.sh"
+    after_skill_crud_edit_log="$after_skill_crud_edit_dir/send.log"
+    after_skill_crud_edit_skill_file="$after_skill_crud_edit_runtime/moltis-update-dialog/SKILL.md"
+    mkdir -p "$after_skill_crud_edit_runtime/moltis-update-dialog"
+    cat >"$after_skill_crud_edit_skill_file" <<'EOF'
+---
+name: moltis-update-dialog
+description: Старая версия описания.
+---
+# moltis-update-dialog
+
+## Workflow
+- Старый текст.
+EOF
+    cat >"$after_skill_crud_edit_send" <<'EOF'
+#!/usr/bin/env bash
+printf 'send %s\n' "$*" >>"$FASTPATH_LOG"
+exit 0
+EOF
+    chmod +x "$after_skill_crud_edit_send"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_edit_dir/intent" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,moltis-update-dialog,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:after-skill-crud-edit","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Обнови навык moltis-update-dialog и потом удали его"}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_crud_edit_update_output="$(
+        env PATH="$MINIMAL_PATH:/usr/bin" \
+            FASTPATH_LOG="$after_skill_crud_edit_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$after_skill_crud_edit_runtime" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_skill_crud_edit_send" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_edit_dir/intent" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:after-skill-crud-edit","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Обнови навык moltis-update-dialog и потом удали его"}],"text":"Сейчас обновлю навык.","tool_calls":[{"name":"update_skill","arguments":{"name":"moltis-update-dialog","description":"Новая версия описания."}}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_crud_edit_update_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_skill_crud_edit_update_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_crud_edit_update_output" && \
+       grep -Fq 'description: Новая версия описания.' "$after_skill_crud_edit_skill_file" && \
+       grep -Fq 'Обновил навык `moltis-update-dialog`.' "$after_skill_crud_edit_log"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall direct skill CRUD path must support update_skill edits without falling back to the broken Telegram tool boundary"
+    fi
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_edit_dir/intent" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,moltis-update-dialog,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:after-skill-crud-delete","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Удали навык moltis-update-dialog"}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_crud_edit_delete_output="$(
+        env PATH="$MINIMAL_PATH:/usr/bin" \
+            FASTPATH_LOG="$after_skill_crud_edit_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$after_skill_crud_edit_runtime" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_skill_crud_edit_send" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_edit_dir/intent" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:after-skill-crud-delete","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Удали навык moltis-update-dialog"}],"text":"Теперь удалю навык.","tool_calls":[{"name":"delete_skill","arguments":{"name":"moltis-update-dialog"}}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_crud_edit_delete_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_skill_crud_edit_delete_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_crud_edit_delete_output" && \
+       [[ ! -e "$after_skill_crud_edit_runtime/moltis-update-dialog" ]] && \
+       grep -Fq 'Удалил навык `moltis-update-dialog`.' "$after_skill_crud_edit_log"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall direct skill CRUD path must support delete_skill and leave no runtime skill directory behind"
     fi
 
     test_start "component_after_llm_guard_preserves_allowlisted_tavily_tool_calls_while_rewriting_progress_text"

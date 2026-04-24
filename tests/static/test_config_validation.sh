@@ -457,10 +457,12 @@ PY
        rg -Fq 'Если hook/runtime snapshot не подтверждает список навыков, честно скажи, что это не доказательство отсутствия навыков.' "$TOML_CONFIG" && \
        rg -Fq 'Для вопросов вида `какие у тебя навыки`, `что у тебя с навыками`, `skills?` сначала дай прямой список имён навыков' "$TOML_CONFIG" && \
        rg -Fq 'Для такого skill visibility ответа не ограничивайся только количеством навыков' "$TOML_CONFIG" && \
-       rg -Fq 'Для skill visibility/create/update/patch/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `patch_skill`, `delete_skill`, `write_skill_files`' "$TOML_CONFIG"; then
+       rg -Fq 'Для skill visibility/create/update/patch/delete в user-facing Telegram предпочитай dedicated tools `create_skill`, `update_skill`, `patch_skill`, `delete_skill`, `write_skill_files`' "$TOML_CONFIG" && \
+       rg -Fq 'Для native skill tools соблюдай official schema: `create_skill` -> `name` + `content` (+ optional `description`), `update_skill` -> `name` + `content` (+ optional `description`), `patch_skill` -> `name` + `patches` (+ optional `description`), `delete_skill` -> `name`, `write_skill_files` -> `name` + `files`.' "$TOML_CONFIG" && \
+       rg -Fq 'Не используй legacy поля `body`, `allowed_tools` и `instructions` при вызовах `create_skill`/`update_skill`/`patch_skill`; если нужен sidecar-файл, делай это через `write_skill_files`.' "$TOML_CONFIG"; then
         test_pass
     else
-        test_fail "Primary Moltis identity prompt must prevent skill false negatives, force direct skill-name listing for visibility questions, and steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing"
+        test_fail "Primary Moltis identity prompt must prevent skill false negatives, force direct skill-name listing for visibility questions, steer Telegram skill-authoring turns into dedicated skill tools instead of filesystem probing, and pin the official content/patches-based skill tool schema without legacy body/instructions fields"
     fi
 
     test_start "static_identity_prompt_forces_sparse_skill_create_to_use_minimal_scaffold_without_template_search"
