@@ -131,6 +131,38 @@ NODE
         test_fail "Probe must preserve raw multiline reply text while keeping normalized text for correlation logic"
     fi
 
+    test_start "component_telegram_web_probe_treats_symlinked_absolute_path_as_entrypoint"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+
+const { isEntrypointPath } = await import(process.env.NODE_SCRIPT);
+const scriptPath = process.env.NODE_SCRIPT;
+const projectRoot = path.dirname(path.dirname(scriptPath));
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "telegram-web-probe-entrypoint-"));
+const symlinkRoot = path.join(tempRoot, "active");
+fs.symlinkSync(projectRoot, symlinkRoot, "dir");
+
+try {
+  const symlinkedScriptPath = path.join(symlinkRoot, "scripts", "telegram-web-user-probe.mjs");
+  if (!isEntrypointPath(scriptPath)) {
+    throw new Error(`expected real script path to be treated as entrypoint: ${scriptPath}`);
+  }
+  if (!isEntrypointPath(symlinkedScriptPath)) {
+    throw new Error(`expected symlinked absolute script path to be treated as entrypoint: ${symlinkedScriptPath}`);
+  }
+} finally {
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe entrypoint detection must survive absolute symlink paths such as /opt/moltinger-active/scripts/..."
+    fi
+
     test_start "component_telegram_web_probe_waits_for_stable_final_reply_before_passing"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";

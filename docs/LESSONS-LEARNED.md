@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 90
+**Total Lessons**: 91
 
 ---
 
@@ -60,7 +60,8 @@
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
-#### P2 (29 lessons)
+#### P2 (30 lessons)
+- [Telegram Web probe silently exited when invoked through the active-root symlink path](../docs/rca/2026-04-24-telegram-web-probe-symlink-entrypoint-silently-exited.md)
 - [Telegram UTF-8 matchers depended on Encode.pm that the live container did not ship](../docs/rca/2026-04-24-telegram-utf8-matchers-depended-on-encode-pm.md)
 - [Telegram intent routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
@@ -206,7 +207,8 @@
 #### security (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### shell (8 lessons)
+#### shell (9 lessons)
+- [Telegram Web probe silently exited when invoked through the active-root symlink path](../docs/rca/2026-04-24-telegram-web-probe-symlink-entrypoint-silently-exited.md)
 - [Telegram UTF-8 matchers depended on Encode.pm that the live container did not ship](../docs/rca/2026-04-24-telegram-utf8-matchers-depended-on-encode-pm.md)
 - [Telegram intent routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
@@ -224,9 +226,9 @@
 
 ### Popular Tags
 
-- `rca` (36 lessons)
+- `rca` (37 lessons)
 - `moltis` (28 lessons)
-- `telegram` (26 lessons)
+- `telegram` (27 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
 - `gitops` (16 lessons)
@@ -242,10 +244,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 90 |
+| Total Lessons | 91 |
 | Critical (P0/P1) | 45 |
 | Categories | 8 |
-| Unique Tags | 175 |
+| Unique Tags | 177 |
 
 ---
 
