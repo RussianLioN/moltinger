@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_STATE = process.env.TELEGRAM_WEB_STATE || ".telegram-web-state.json";
 const DEFAULT_TARGET = process.env.TELEGRAM_WEB_TARGET || "@moltinger_bot";
@@ -1319,9 +1319,26 @@ async function main() {
   }
 }
 
+function resolveEntrypointPath(filePath) {
+  if (!filePath) return "";
+  const resolvedPath = path.resolve(filePath);
+  try {
+    return fs.realpathSync(resolvedPath);
+  } catch {
+    return resolvedPath;
+  }
+}
+
+export function isEntrypointPath(argvPath, metaUrl = import.meta.url) {
+  if (!argvPath || !metaUrl) return false;
+  const modulePath = resolveEntrypointPath(fileURLToPath(metaUrl));
+  const invokedPath = resolveEntrypointPath(argvPath);
+  return modulePath === invokedPath;
+}
+
 function isEntrypoint() {
   if (!process.argv[1]) return false;
-  return import.meta.url === pathToFileURL(process.argv[1]).href;
+  return isEntrypointPath(process.argv[1], import.meta.url);
 }
 
 if (isEntrypoint()) {
