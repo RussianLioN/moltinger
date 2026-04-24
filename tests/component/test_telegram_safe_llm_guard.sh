@@ -30,6 +30,12 @@ run_hook_bundle_with_minimal_path() {
     printf '%s\n' "$input_json" | env PATH="$MINIMAL_PATH" MOLTIS_TELEGRAM_SAFE_LLM_GUARD_SCRIPT="$HOOK_SCRIPT" bash "$HOOK_HANDLER"
 }
 
+run_hook_with_custom_path() {
+    local custom_path="$1"
+    local input_json="$2"
+    printf '%s\n' "$input_json" | env PATH="$custom_path" bash "$HOOK_SCRIPT"
+}
+
 run_component_telegram_safe_llm_guard_tests() {
     start_timer
 
@@ -4527,6 +4533,45 @@ EOF
         test_pass
     else
         test_fail "Perl-based Telegram-safe fastpaths must not depend on open.pm because the live Moltis container does not ship that module"
+    fi
+
+    test_start "component_perl_utf8_matchers_do_not_depend_on_encode_pm"
+    if ! grep -Fq -- '-MEncode=' "$HOOK_SCRIPT" && ! grep -Fq 'use Encode' "$HOOK_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Telegram-safe UTF-8 matcher helpers must not depend on Encode.pm because the live Moltis container does not ship that module"
+    fi
+
+    test_start "component_before_llm_guard_codex_update_context_survives_perl_without_encode_pm"
+    local perl_guard_tmpdir
+    perl_guard_tmpdir="$(mktemp -d)"
+    cat > "$perl_guard_tmpdir/perl" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    if [[ "$arg" == *Encode* ]]; then
+        echo "Encode.pm is unavailable in this test wrapper" >&2
+        exit 97
+    fi
+done
+exec /usr/bin/perl "$@"
+EOF
+    chmod +x "$perl_guard_tmpdir/perl"
+    local before_llm_no_encode_wrapper_output
+    before_llm_no_encode_wrapper_output="$(
+        LANG= \
+        LC_ALL=C \
+        LC_CTYPE=POSIX \
+        run_hook_with_custom_path "$perl_guard_tmpdir:/usr/bin:/bin" \
+            '{"event":"BeforeLLMCall","session_key":"session:no-encode-wrapper","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Почему раньше ты присылал три одинаковых сообщения подряд про обновление Codex CLI?"}],"tool_count":37,"iteration":1}'
+    )"
+    rm -rf "$perl_guard_tmpdir"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_no_encode_wrapper_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_no_encode_wrapper_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$before_llm_no_encode_wrapper_output" && \
+       jq -e '.data.messages[0].content | contains("После исправлений схема такая")' >/dev/null 2>&1 <<<"$before_llm_no_encode_wrapper_output"; then
+        test_pass
+    else
+        test_fail "The exact live codex-update context route must stay functional even when perl wrappers reject any Encode.pm dependency"
     fi
 
     test_start "component_telegram_safe_llm_guard_is_noop_for_non_telegram_safe_models"
