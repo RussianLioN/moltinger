@@ -879,7 +879,7 @@ if [[ "$mode" == "codex_update_scheduler_safe_negative_runtime_check_pass" ]]; t
   "ok": true,
   "status": "pass",
   "stage": "wait_reply",
-  "reply_text": "Нет. По сохранённому контексту наличие такого крона подтверждено не было и подтверждено быть не может без runtime check. Для такого вывода нужен отдельный операторский/runtime check.",
+  "reply_text": "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но по сохранённому контексту наличие такого крона подтверждено не было и подтверждено быть не может без runtime check. Для такого вывода нужен отдельный операторский/runtime check.",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -1007,7 +1007,7 @@ if [[ "$mode" == "codex_update_scheduler_contract_safe_pass" ]]; then
   "ok": true,
   "status": "pass",
   "stage": "wait_reply",
-  "reply_text": "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.",
+  "reply_text": "По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов. Но в Telegram-safe чате я не подтверждаю по памяти, что live cron сейчас действительно включён. Для точного статуса нужен операторский/runtime check, а не memory search.",
   "reply_mid": 42,
   "sent_mid": 41,
   "checks": {
@@ -2294,6 +2294,19 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Authoritative wrapper must classify the exact schedule phrasing as the codex-update scheduler contract"
     fi
 
+    test_start "component_telegram_remote_uat_allows_live_frequency_phrase_for_codex_update_scheduler_contract"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_contract_safe_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Как часто обновляется навык codex-update?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-safe-live-frequency-phrase.json" \
+        >/dev/null 2>&1
+    then
+        test_pass
+    else
+        test_fail "Authoritative wrapper must classify the exact live frequency phrasing as the codex-update scheduler contract"
+    fi
+
     test_start "component_telegram_remote_uat_fails_codex_update_scheduler_question_when_reply_falls_into_skill_detail_summary"
     if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_skill_detail_false_positive_pass \
         "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
@@ -2309,6 +2322,24 @@ run_component_telegram_remote_uat_contract_tests() {
             test_pass
         else
             test_fail "Wrapper must classify codex-update scheduler questions that degrade into skill-detail wording as a scheduler contract mismatch"
+        fi
+    fi
+
+    test_start "component_telegram_remote_uat_fails_live_frequency_phrase_when_reply_falls_into_skill_detail_summary"
+    if TELEGRAM_WEB_STUB_MODE=codex_update_scheduler_skill_detail_false_positive_pass \
+        "$TEST_TMPDIR/telegram-e2e-on-demand.sh" \
+        --mode authoritative \
+        --message "Как часто обновляется навык codex-update?" \
+        --output "$TEST_TMPDIR/result-codex-update-scheduler-skill-detail-live-frequency.json" \
+        >/dev/null 2>&1
+    then
+        test_fail "Authoritative wrapper must fail when the exact live frequency phrasing gets a generic codex-update skill-detail reply"
+    else
+        if jq -e '.failure.code == "semantic_codex_update_scheduler_contract_mismatch" and .run.stage == "semantic_review"' "$TEST_TMPDIR/result-codex-update-scheduler-skill-detail-live-frequency.json" >/dev/null 2>&1
+        then
+            test_pass
+        else
+            test_fail "Wrapper must classify the exact live frequency phrasing that degrades into skill-detail wording as a scheduler contract mismatch"
         fi
     fi
 

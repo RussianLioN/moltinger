@@ -800,7 +800,7 @@ message_is_codex_update_scheduler_query() {
     return 1
   fi
 
-  text_matches_extended_regex "$normalized" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'
+  text_matches_extended_regex "$normalized" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые|((как|насколько).{0,12}часто.{0,80}(обновля|проверя|срабатыва|запуска|монитор))|((с[[:space:]]+какой|какова).{0,12}(периодичност|частот).{0,80}(обновля|проверя|срабатыва|запуска|монитор)))'
 }
 
 message_is_codex_update_context_query() {
@@ -918,7 +918,7 @@ reply_has_codex_update_scheduler_memory_false_negative() {
 }
 
 reply_matches_codex_update_scheduler_contract() {
-  local normalized has_scheduler_scope=false has_runtime_boundary=false
+  local normalized has_scheduler_scope=false has_frequency=false has_runtime_boundary=false
   normalized="$(normalize_message_text "${1:-}" | tr '[:upper:]' '[:lower:]')"
   [[ -n "$normalized" ]] || return 1
 
@@ -926,11 +926,15 @@ reply_matches_codex_update_scheduler_contract() {
     has_scheduler_scope=true
   fi
 
+  if printf '%s' "$normalized" | grep -Eiq '(каждые 6 часов|раз в 6 часов|с интервалом 6 часов)'; then
+    has_frequency=true
+  fi
+
   if printf '%s' "$normalized" | grep -Eiq '(не подтверждаю по памяти|не доказывает, что live cron сейчас|подтверждено быть не может без runtime check|нужен( отдельный)? операторск(ий|ого)/runtime check|нужен runtime check|для точного статуса нужен операторский/runtime check|без runtime check|не могу подтвердить без runtime check)'; then
     has_runtime_boundary=true
   fi
 
-  [[ "$has_scheduler_scope" == true && "$has_runtime_boundary" == true ]]
+  [[ "$has_scheduler_scope" == true && "$has_frequency" == true && "$has_runtime_boundary" == true ]]
 }
 
 reply_matches_codex_update_context_contract() {

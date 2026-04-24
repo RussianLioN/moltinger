@@ -2506,7 +2506,7 @@ build_codex_update_scheduler_reply_text() {
         state_run_date="$(format_iso_date_short "$state_run_at" || true)"
     fi
 
-    reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI.'
+    reply_text='По проектному контракту у codex-update есть отдельный scheduler path для регулярной проверки обновлений Codex CLI каждые 6 часов.'
     if [[ -n "$state_run_date" ]]; then
         reply_text="${reply_text} В сохранённом состоянии последняя проверка была ${state_run_date}, но это само по себе не доказывает, что live cron сейчас включён."
     else
@@ -2775,7 +2775,7 @@ text_looks_like_codex_update_scheduler_request() {
 
     [[ -n "$source_text" ]] || return 1
 
-    text_matches_extended_regex "$source_text" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'
+    text_matches_extended_regex "$source_text" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые|((как|насколько).{0,12}часто.{0,80}(обновля|проверя|срабатыва|запуска|монитор))|((с[[:space:]]+какой|какова).{0,12}(периодичност|частот).{0,80}(обновля|проверя|срабатыва|запуска|монитор)))'
 }
 
 text_looks_like_codex_update_release_request() {
