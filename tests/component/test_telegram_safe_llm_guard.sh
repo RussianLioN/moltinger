@@ -209,7 +209,7 @@ EOF
        jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
        jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
        jq -e '([.data.messages[].content] | join("\n")) | contains("не чиню и не отлаживаю") | not' >/dev/null 2>&1 <<<"$maintenance_to_create_output" && \
-       [[ "$maintenance_to_create_intent" == *$'\tskill_native_crud\t'* ]]; then
+       ([[ "$maintenance_to_create_intent" == *$'\tskill_native_crud\t'* ]] || [[ "$maintenance_to_create_intent" == *$'\tskill_native_crud:'* ]]); then
         test_pass
     else
         test_fail "BeforeLLMCall guard must replace stale maintenance intent with the native skill CRUD lane when the latest user turn is a plain create-skill request"
@@ -2764,7 +2764,7 @@ EOF
        jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
        jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$stale_visibility_create_output" && \
        [[ ! -f "$stale_visibility_create_file" ]] && \
-       [[ "$stale_visibility_create_intent" == *$'\tskill_native_crud\t'* ]]; then
+       ([[ "$stale_visibility_create_intent" == *$'\tskill_native_crud\t'* ]] || [[ "$stale_visibility_create_intent" == *$'\tskill_native_crud:'* ]]); then
         test_pass
     else
         test_fail "BeforeLLMCall guard must keep create follow-ups on the native tool lane, clear stale visibility intent, and persist only the current native CRUD lane without scaffold writes"
@@ -3481,8 +3481,8 @@ EOF
         test_fail "AfterLLMCall guard must directly execute Telegram-safe native skill CRUD, send one clean user-facing summary, and suppress the later raw tool tail"
     fi
 
-    test_start "component_after_llm_guard_recovers_sparse_skill_create_when_llm_returns_empty_turn"
-    local after_sparse_create_empty_dir after_sparse_create_empty_runtime after_sparse_create_empty_send after_sparse_create_empty_log after_sparse_create_empty_output after_sparse_create_empty_skill_file
+    test_start "component_after_llm_guard_recovers_sparse_skill_create_when_live_after_llm_payload_omits_user_message"
+    local after_sparse_create_empty_dir after_sparse_create_empty_runtime after_sparse_create_empty_send after_sparse_create_empty_log after_sparse_create_empty_output after_sparse_create_empty_skill_file after_sparse_create_empty_before_intent
     after_sparse_create_empty_dir="$(secure_temp_dir telegram-safe-after-sparse-create-empty)"
     after_sparse_create_empty_runtime="$after_sparse_create_empty_dir/runtime"
     after_sparse_create_empty_send="$after_sparse_create_empty_dir/send.sh"
@@ -3500,6 +3500,7 @@ EOF
         bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
 {"event":"BeforeLLMCall","data":{"session_key":"session:after-sparse-create-empty","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай новый навык moltis-version-watch-20260424 для автоматического отслеживания новой версии Moltis."}],"tool_count":37,"iteration":1}}
 EOF
+    after_sparse_create_empty_before_intent="$(cat "$after_sparse_create_empty_dir/intent/session_after-sparse-create-empty.intent" 2>/dev/null || true)"
     after_sparse_create_empty_output="$(
         env PATH="$MINIMAL_PATH:/usr/bin" \
             FASTPATH_LOG="$after_sparse_create_empty_log" \
@@ -3508,18 +3509,19 @@ EOF
             MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_sparse_create_empty_send" \
             MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_sparse_create_empty_dir/intent" \
             bash "$HOOK_SCRIPT" <<'EOF'
-{"event":"AfterLLMCall","data":{"session_key":"session:after-sparse-create-empty","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай новый навык moltis-version-watch-20260424 для автоматического отслеживания новой версии Moltis."}],"text":"","tool_calls":[]}}
+{"event":"AfterLLMCall","data":{"session_key":"session:after-sparse-create-empty","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"system","content":"The current user datetime is 2026-04-24 06:07:59 MSK."}],"text":"","tool_calls":[]}}
 EOF
     )"
     if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
        jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
        jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
        [[ -f "$after_sparse_create_empty_skill_file" ]] && \
+       [[ "$after_sparse_create_empty_before_intent" == *$'\tskill_native_crud:create:moltis-version-watch-20260424\t'* ]] && \
        grep -Fq 'name: moltis-version-watch-20260424' "$after_sparse_create_empty_skill_file" && \
        grep -Fq 'Создал базовый шаблон навыка `moltis-version-watch-20260424`.' "$after_sparse_create_empty_log"; then
         test_pass
     else
-        test_fail "AfterLLMCall guard must recover sparse Telegram skill creation when the model returns an empty turn, so valid create requests do not end in a silent hole"
+        test_fail "AfterLLMCall guard must recover sparse Telegram skill creation even when the live-shaped AfterLLMCall payload omits the user message, so valid create requests do not end in a silent hole"
     fi
 
     test_start "component_after_llm_guard_direct_executes_update_and_delete_skill_crud_when_direct_fastpath_is_available"

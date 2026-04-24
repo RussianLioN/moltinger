@@ -2092,6 +2092,66 @@ clear_turn_intent() {
     rm -f "$intent_file" 2>/dev/null || true
 }
 
+format_skill_native_crud_turn_intent() {
+    local crud_mode="${1:-generic}"
+    local skill_name="${2:-}"
+
+    case "$crud_mode" in
+        create|update|delete|generic)
+            ;;
+        *)
+            crud_mode="generic"
+            ;;
+    esac
+
+    if [[ -n "$skill_name" ]]; then
+        printf 'skill_native_crud:%s:%s' "$crud_mode" "$skill_name"
+        return 0
+    fi
+
+    if [[ "$crud_mode" != "generic" ]]; then
+        printf 'skill_native_crud:%s' "$crud_mode"
+        return 0
+    fi
+
+    printf 'skill_native_crud'
+}
+
+hydrate_persisted_skill_native_crud_state() {
+    local intent_name="${1:-}"
+
+    persisted_skill_native_crud_request=false
+    persisted_sparse_skill_create_request=false
+    persisted_skill_native_crud_mode=""
+    persisted_skill_native_crud_name=""
+
+    case "${intent_name:-}" in
+        skill_native_crud)
+            persisted_skill_native_crud_request=true
+            persisted_skill_native_crud_mode="generic"
+            ;;
+        skill_native_crud:*)
+            persisted_skill_native_crud_request=true
+            if [[ "$intent_name" =~ ^skill_native_crud:([a-z]+):([A-Za-z0-9._-]+)$ ]]; then
+                persisted_skill_native_crud_mode="${BASH_REMATCH[1]}"
+                persisted_skill_native_crud_name="${BASH_REMATCH[2]}"
+            elif [[ "$intent_name" =~ ^skill_native_crud:([a-z]+)$ ]]; then
+                persisted_skill_native_crud_mode="${BASH_REMATCH[1]}"
+            else
+                persisted_skill_native_crud_mode="generic"
+            fi
+            ;;
+    esac
+
+    if [[ "$persisted_skill_native_crud_request" == true && -z "$persisted_skill_native_crud_mode" ]]; then
+        persisted_skill_native_crud_mode="generic"
+    fi
+
+    if [[ "$persisted_skill_native_crud_mode" == "create" ]]; then
+        persisted_sparse_skill_create_request=true
+    fi
+}
+
 discover_runtime_skill_names_csv() {
     local csv_override="${MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES:-}"
     local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
@@ -4235,7 +4295,7 @@ current_turn_requires_native_skill_tools_only() {
         return 1
     fi
 
-    if [[ "${current_turn_skill_mutation_request:-false}" == true || "${looks_like_sparse_skill_create_request:-false}" == true || "${persisted_skill_native_crud_request:-false}" == true || "${persisted_turn_intent:-}" == "skill_native_crud" ]]; then
+    if [[ "${current_turn_skill_mutation_request:-false}" == true || "${looks_like_sparse_skill_create_request:-false}" == true || "${persisted_skill_native_crud_request:-false}" == true ]]; then
         return 0
     fi
 
@@ -4348,6 +4408,22 @@ tool_calls_only_tavily_allowlisted() {
     if current_turn_requires_native_skill_tools_only; then
         return 1
     fi
+
+    while IFS= read -r tool_name; do
+        [[ -n "$tool_name" ]] || continue
+        saw_name=true
+        if ! tool_name_is_tavily_allowlisted "$tool_name"; then
+            return 1
+        fi
+    done < <(extract_tool_call_names "$tool_calls_json" || true)
+
+    $saw_name
+}
+
+tool_calls_only_tavily_allowlisted_unchecked() {
+    local tool_calls_json="${1:-}"
+    local saw_name=false
+    local tool_name=""
 
     while IFS= read -r tool_name; do
         [[ -n "$tool_name" ]] || continue
@@ -4909,10 +4985,6 @@ requested_skill_reference_name="$(extract_referenced_skill_candidate "${latest_u
 skill_runtime_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
 resolved_skill_name="$(resolve_runtime_skill_name_from_text "${latest_user_message:-${user_message:-}}" "$skill_runtime_snapshot_csv" || true)"
 requested_skill_name="$(extract_requested_skill_name "${latest_user_message:-${user_message:-}}" || true)"
-requested_skill_name_re=""
-if [[ -n "$requested_skill_name" ]]; then
-    requested_skill_name_re="$(printf '%s' "$requested_skill_name" | sed 's/[][(){}.^$?+*|\\/]/\\&/g')"
-fi
 legacy_skill_create_intent=false
 persisted_skill_create_state=""
 persisted_skill_create_name=""
@@ -4942,7 +5014,6 @@ persisted_codex_update_scheduler_request=false
 persisted_codex_update_context_request=false
 persisted_codex_update_maintenance_request=false
 persisted_generic_maintenance_request=false
-persisted_skill_native_crud_request=false
 case "${persisted_turn_intent:-}" in
     codex_update)
         persisted_codex_update_request=true
@@ -4961,10 +5032,8 @@ case "${persisted_turn_intent:-}" in
     maintenance_generic)
         persisted_generic_maintenance_request=true
         ;;
-    skill_native_crud)
-        persisted_skill_native_crud_request=true
-        ;;
 esac
+hydrate_persisted_skill_native_crud_state "${persisted_turn_intent:-}"
 if [[ -z "$resolved_skill_name" && -n "$persisted_skill_detail_name" ]]; then
     resolved_skill_name="$persisted_skill_detail_name"
 fi
@@ -4973,6 +5042,13 @@ if [[ -z "$resolved_skill_name" && -n "$persisted_skill_maintenance_name" && "$p
 fi
 if [[ -z "$requested_skill_reference_name" && -n "$resolved_skill_name" ]]; then
     requested_skill_reference_name="$resolved_skill_name"
+fi
+if [[ -z "$requested_skill_name" && -n "$persisted_skill_native_crud_name" ]]; then
+    requested_skill_name="$persisted_skill_native_crud_name"
+fi
+requested_skill_name_re=""
+if [[ -n "$requested_skill_name" ]]; then
+    requested_skill_name_re="$(printf '%s' "$requested_skill_name" | sed 's/[][(){}.^$?+*|\\/]/\\&/g')"
 fi
 if [[ "$codex_update_subject_request" != true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(codex([[:space:]]+cli)?|codex-update)'; then
     codex_update_subject_request=true
@@ -5219,7 +5295,19 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     elif [[ "$current_turn_skill_maintenance_request" == true ]]; then
         next_turn_intent="skill_maintenance:${resolved_skill_name:-${requested_skill_reference_name:-generic}}"
     elif [[ "$current_turn_skill_mutation_request" == true || "$looks_like_sparse_skill_create_request" == true ]]; then
-        next_turn_intent="skill_native_crud"
+        next_skill_native_crud_mode="generic"
+        next_skill_native_crud_name="${requested_skill_name:-${resolved_skill_name:-${requested_skill_reference_name:-}}}"
+
+        if [[ "$looks_like_sparse_skill_create_request" == true ]]; then
+            next_skill_native_crud_mode="create"
+            next_skill_native_crud_name="${requested_skill_name:-}"
+        elif printf '%s' "$intent_text_flat" | grep -Eiq '(^|[^[:alnum:]_])(удали(ть|м)?|delete|remove)([^[:alnum:]_]|$)'; then
+            next_skill_native_crud_mode="delete"
+        elif printf '%s' "$intent_text_flat" | grep -Eiq '(^|[^[:alnum:]_])(обнов(и|им|ить)|измени(ть|м)|редактир(уй|овать|уйте)?|патч(ь|ить)|перепиш(и|ем|ите|у)|update|patch|edit|rewrite)([^[:alnum:]_]|$)'; then
+            next_skill_native_crud_mode="update"
+        fi
+
+        next_turn_intent="$(format_skill_native_crud_turn_intent "$next_skill_native_crud_mode" "$next_skill_native_crud_name")"
     elif [[ "$current_turn_codex_update_request" == true ]]; then
         next_turn_intent="$(codex_update_intent_name_for_mode "$(determine_codex_update_reply_mode "$current_turn_codex_update_context_request" "$current_turn_codex_update_scheduler_request")")"
     elif [[ "$current_turn_skill_detail_request" == true && -n "${resolved_skill_name:-}" ]]; then
@@ -5248,7 +5336,6 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
     persisted_codex_update_context_request=false
     persisted_codex_update_maintenance_request=false
     persisted_generic_maintenance_request=false
-    persisted_skill_native_crud_request=false
     case "${persisted_turn_intent:-}" in
         codex_update)
             persisted_codex_update_request=true
@@ -5267,10 +5354,8 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         maintenance_generic)
             persisted_generic_maintenance_request=true
             ;;
-        skill_native_crud)
-            persisted_skill_native_crud_request=true
-            ;;
     esac
+    hydrate_persisted_skill_native_crud_state "${persisted_turn_intent:-}"
 
     if [[ -n "$effective_delivery_suppression" && "$has_current_user_turn" == true && "$current_iteration" =~ ^[0-9]+$ ]] && (( current_iteration > 1 )); then
         write_audit_line "before_block reason=direct_fastpath_repeat_guard token=$effective_delivery_suppression iteration=$current_iteration"
@@ -5564,14 +5649,20 @@ if [[ "$event" == "MessageSending" && -n "$effective_delivery_suppression" && "$
     exit 0
 fi
 
+effective_sparse_skill_create_request=false
+if [[ "$current_turn_sparse_skill_create_request" == true || "$persisted_sparse_skill_create_request" == true ]]; then
+    effective_sparse_skill_create_request=true
+fi
+sparse_skill_create_target_name="${requested_skill_name:-${persisted_skill_native_crud_name:-}}"
+
 if [[ "$event" == "AfterLLMCall" && "$is_telegram_safe_lane" == true ]] && \
    flag_enabled "$DIRECT_FASTPATH_ENABLED" && [[ -x "$DIRECT_SEND_SCRIPT" ]] && \
    current_turn_requires_native_skill_tools_only && \
-   [[ "$current_turn_sparse_skill_create_request" == true ]] && \
+   [[ "$effective_sparse_skill_create_request" == true ]] && \
    [[ "$tool_calls_present" != true ]] && \
-   [[ -n "${requested_skill_name:-}" ]] && \
+   [[ -n "${sparse_skill_create_target_name:-}" ]] && \
    [[ -z "${response_text_flat:-}" ]]; then
-    sparse_skill_create_fallback_tool_calls_json="$(build_sparse_skill_create_fallback_tool_calls_json "${requested_skill_name:-}" || true)"
+    sparse_skill_create_fallback_tool_calls_json="$(build_sparse_skill_create_fallback_tool_calls_json "${sparse_skill_create_target_name:-}" || true)"
     if attempt_direct_skill_crud_after_llm_fastpath "${sparse_skill_create_fallback_tool_calls_json:-}" "sparse_create_empty_turn"; then
         exit 0
     fi
@@ -5714,6 +5805,13 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
 fi
 
 if [[ "$event" == "AfterLLMCall" && "$tool_calls_allowlisted_only" == true && ( "$tool_calls_present" == true || "$has_delivery_internal_telemetry" == true || "$has_after_llm_tool_intent" == true || "$has_user_visible_internal_planning" == true || "$has_skill_path_false_negative" == true ) ]]; then
+    if [[ "$is_telegram_safe_lane" == true ]] && current_turn_requires_native_skill_tools_only && tool_calls_only_tavily_allowlisted_unchecked "$tool_calls_json"; then
+        fallback_text='В Telegram-safe режиме я не запускаю инструменты browser/search внутри skill CRUD turn. Продолжим через skill-tools или web UI без Tavily-поиска.'
+        write_audit_line "emit_modify event=$event reason=skill_native_crud_tavily_fail_closed tool_calls_present=$tool_calls_present"
+        emit_modified_payload "$fallback_text" true
+        exit 0
+    fi
+
     fallback_text='Выполняю запрос через встроенные инструменты без показа внутренних логов. После завершения вернусь с итогом.'
     if tool_calls_only_skill_allowlisted "$tool_calls_json"; then
         fallback_text='Выполняю запрос по навыкам через встроенные инструменты без filesystem-проб. После завершения вернусь с итогом.'
