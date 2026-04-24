@@ -61,7 +61,7 @@
 - [Self-inflicted GitOps drift from deployment audit markers](../docs/rca/2026-03-08-gitops-audit-markers-self-drift.md)
 
 #### P2 (28 lessons)
-- [Telegram skill CRUD routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
+- [Telegram intent routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
 - [Worktree governance left raw create and cleanup reconciliation gaps](../docs/rca/2026-04-15-worktree-governance-left-raw-create-and-cleanup-reconciliation-gaps.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
@@ -206,7 +206,7 @@
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
 #### shell (7 lessons)
-- [Telegram skill CRUD routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
+- [Telegram intent routing broke under POSIX locale and broken-perl fallback](../docs/rca/2026-04-24-telegram-skill-crud-posix-locale-and-perl-fallback.md)
 - [Beads wrapper delegated into a sibling worktree wrapper and left stale JSONL export](../docs/rca/2026-03-20-beads-wrapper-path-pollution-caused-stale-jsonl-export.md)
 - [GitOps repair workflow failed before execution because inline heredoc was not parse-safe in GitHub Actions](../docs/rca/2026-03-13-gitops-repair-heredoc-parse-failure.md)
 - [Topology refresh misclassified permission boundary as a held lock](../docs/rca/2026-03-09-topology-lock-permission-boundary.md)

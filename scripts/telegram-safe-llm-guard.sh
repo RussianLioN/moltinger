@@ -2730,7 +2730,23 @@ text_looks_like_codex_update_context_request() {
 
     [[ -n "$source_text" ]] || return 1
 
-    printf '%s' "$source_text" | grep -Eiq '((почему|зачем).{0,80}(раньше|ранее|до этого))|((три|несколько).{0,20}(раза|раз|подряд))|(дубл(ь|и|ями|ируются|ировались)?|повтор(но|ные|ял(ось|ись)?|яется|ялись)?)|(что[[:space:]]+(изменилось|поменялось))|(после[[:space:]]+исправлен)|((схема|логика).{0,40}работы)|((как|каким образом).{0,40}(сейчас[[:space:]]+)?работа(ет|ешь|ют|ет сейчас))|((как|каким образом).{0,40}(устроен|устроена))'
+    text_matches_extended_regex "$source_text" '((почему|зачем).{0,80}(раньше|ранее|до этого))|((три|несколько).{0,20}(раза|раз|подряд))|(дубл(ь|и|ями|ируются|ировались)?|повтор(но|ные|ял(ось|ись)?|яется|ялись)?)|(что[[:space:]]+(изменилось|поменялось))|(после[[:space:]]+(исправлен|починк))|((схема|логика).{0,40}работы)|((как|каким образом).{0,40}(сейчас[[:space:]]+)?работа(ет|ешь|ют|ет сейчас))|((как|каким образом).{0,40}(устроен|устроена))'
+}
+
+text_looks_like_codex_update_scheduler_request() {
+    local source_text="${1:-}"
+
+    [[ -n "$source_text" ]] || return 1
+
+    text_matches_extended_regex "$source_text" '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'
+}
+
+text_looks_like_codex_update_release_request() {
+    local source_text="${1:-}"
+
+    [[ -n "$source_text" ]] || return 1
+
+    text_matches_extended_regex "$source_text" '(обнови|обновить|обновлен|обновлени|upgrade|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового|новой|новая|новую|changelog|release notes)'
 }
 
 text_looks_like_maintenance_request() {
@@ -4385,11 +4401,11 @@ codex_update_subject_request=false
 if [[ "$looks_like_skill_turn" != true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(codex([[:space:]]+cli)?|codex-update)'; then
     codex_update_subject_request=true
 fi
-if [[ "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(крон(а|у|ом)?|cron|scheduler|schedule|расписан|расписанию|регулярн|автопровер|автоматич|watcher|монитор|периодич|daemon|демон|каждые)'; then
+if [[ "$codex_update_subject_request" == true ]] && text_looks_like_codex_update_scheduler_request "$intent_text_flat"; then
     current_turn_codex_update_scheduler_request=true
     current_turn_codex_update_request=true
 fi
-if [[ "$current_turn_codex_update_request" != true && "$codex_update_subject_request" == true ]] && printf '%s' "$intent_text_flat" | grep -Eiq '(обнови|обновить|обновлен|обновлени|upgrade|релиз|release|releases|version|versions|верси|latest|stable|стабильн|что нового|нового|новой|новая|новую|changelog|release notes)'; then
+if [[ "$current_turn_codex_update_request" != true && "$codex_update_subject_request" == true ]] && text_looks_like_codex_update_release_request "$intent_text_flat"; then
     current_turn_codex_update_request=true
 fi
 

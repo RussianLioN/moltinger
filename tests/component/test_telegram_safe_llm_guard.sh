@@ -300,6 +300,50 @@ EOF
         test_fail "BeforeLLMCall guard must keep an exact Russian update-skill prompt on the native CRUD lane under POSIX locale"
     fi
 
+    test_start "component_before_llm_guard_routes_exact_live_codex_update_duplicate_history_question_into_context_contract_under_posix_locale"
+    local before_llm_posix_codex_context_duplicate_output
+    before_llm_posix_codex_context_duplicate_output="$(
+        env PATH="$MINIMAL_PATH" \
+            LANG= \
+            LC_ALL=C \
+            LC_CTYPE=POSIX \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","session_key":"session:posix-codex-context-duplicate","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Почему раньше ты присылал три одинаковых сообщения подряд про обновление Codex CLI?"}],"tool_count":37,"iteration":1}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output" && \
+       jq -e '.data.messages[0].content | contains("После исправлений схема такая")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output" && \
+       jq -e '.data.messages[0].content | contains("last_alert_fingerprint")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output" && \
+       jq -e '.data.messages[0].content | test("показывает, есть ли новая стабильная версия|не наш[её]л точного подтвержд[её]нного runtime-навыка") | not' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_duplicate_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must route the exact live duplicate-history Codex CLI question into the codex-update context contract under POSIX locale"
+    fi
+
+    test_start "component_before_llm_guard_routes_exact_live_codex_update_post_fix_question_into_context_contract_under_posix_locale"
+    local before_llm_posix_codex_context_post_fix_output
+    before_llm_posix_codex_context_post_fix_output="$(
+        env PATH="$MINIMAL_PATH" \
+            LANG= \
+            LC_ALL=C \
+            LC_CTYPE=POSIX \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","session_key":"session:posix-codex-context-post-fix","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=prod | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Что изменилось в навыке codex-update после починки?"}],"tool_count":37,"iteration":1}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output" && \
+       jq -e '.data.tool_count == 0' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe codex-update hard override")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output" && \
+       jq -e '.data.messages[0].content | contains("После исправлений схема такая")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output" && \
+       jq -e '.data.messages[0].content | contains("last_alert_fingerprint")' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output" && \
+       jq -e '.data.messages[0].content | test("показывает, есть ли новая стабильная версия|не наш[её]л точного подтвержд[её]нного runtime-навыка") | not' >/dev/null 2>&1 <<<"$before_llm_posix_codex_context_post_fix_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must route the exact live post-fix Codex update question into the codex-update context contract under POSIX locale"
+    fi
+
     test_start "component_before_llm_guard_hard_overrides_skill_visibility_queries_to_deterministic_runtime_list"
     local before_llm_skill_visibility_output
     before_llm_skill_visibility_output="$(
