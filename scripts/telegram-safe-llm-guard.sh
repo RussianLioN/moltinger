@@ -3253,6 +3253,27 @@ PY
     return 1
 }
 
+sparse_skill_create_history_has_stale_failure() {
+    local messages_json="${1:-}"
+    local messages_flat=""
+
+    [[ -n "$messages_json" ]] || return 1
+
+    messages_flat="$(flatten_text_for_match "$messages_json")"
+    [[ -n "$messages_flat" ]] || return 1
+
+    printf '%s' "$messages_flat" | grep -Eiq "create_skill.{0,200}missing[[:space:]]+name|missing[[:space:]]+name.{0,200}create_skill|не[[:space:]]+(смог|могу).{0,200}созда|не[[:space:]]+создал(ся|ась|ись)?|create_skill.{0,120}(сломан|broken)|(сломан|broken).{0,120}create_skill|инструмент.{0,120}(сломан|broken)"
+}
+
+build_sparse_skill_create_reset_messages_json() {
+    local _messages_json="${1:-}"
+    local latest_user_content="${2:-}"
+
+    [[ -n "$latest_user_content" ]] || return 1
+
+    printf '[%s]' "$(build_message_json user "$latest_user_content")"
+}
+
 create_runtime_skill_scaffold() {
     local skill_name="${1:-}"
     local runtime_root="${MOLTIS_RUNTIME_SKILLS_ROOT:-/home/moltis/.moltis/skills}"
@@ -5723,6 +5744,10 @@ if [[ "$event" == "BeforeLLMCall" ]]; then
         if [[ "$looks_like_skill_turn" == true ]]; then
             skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
             if [[ "$looks_like_sparse_skill_create_request" == true ]]; then
+                if sparse_skill_create_history_has_stale_failure "$messages_json"; then
+                    messages_json="$(build_sparse_skill_create_reset_messages_json "$messages_json" "${latest_user_message:-${user_message:-}}" || printf '%s' "$messages_json")"
+                    write_audit_line "before_modify reason=sparse_create_history_reset tool_count=${tool_count:-preserve} latest_skill=${requested_skill_name:-missing}"
+                fi
                 messages_json="$(prepend_message_to_array "$messages_json" system "$(build_sparse_skill_create_guard_message)")"
             fi
             messages_json="$(prepend_message_to_array "$messages_json" system "$(build_skill_authoring_guard_message)")"

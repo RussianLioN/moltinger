@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 95
+**Total Lessons**: 96
 
 ---
 
@@ -14,10 +14,11 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (48 lessons)
+#### P1 (49 lessons)
 - [Telegram skill CRUD fastpath depended on JSON field order when extracting tool call names](../docs/rca/2026-04-24-telegram-tool-call-name-extraction-depended-on-json-field-order.md)
 - [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram sparse skill create recovery still depended on the current-turn user message instead of persisted CRUD intent](../docs/rca/2026-04-24-telegram-sparse-create-recovery-needed-persisted-crud-intent.md)
+- [Telegram sparse skill create replayed stale create-skill failure from contaminated history](../docs/rca/2026-04-24-telegram-sparse-create-history-replayed-stale-failure.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram Web probe collapsed multiline /status replies before exact semantic review](../docs/rca/2026-04-23-telegram-web-probe-collapsed-multiline-status-contract.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
@@ -199,10 +200,11 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (11 lessons)
+#### product (12 lessons)
 - [Telegram skill CRUD fastpath depended on JSON field order when extracting tool call names](../docs/rca/2026-04-24-telegram-tool-call-name-extraction-depended-on-json-field-order.md)
 - [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram sparse skill create recovery still depended on the current-turn user message instead of persisted CRUD intent](../docs/rca/2026-04-24-telegram-sparse-create-recovery-needed-persisted-crud-intent.md)
+- [Telegram sparse skill create replayed stale create-skill failure from contaminated history](../docs/rca/2026-04-24-telegram-sparse-create-history-replayed-stale-failure.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
@@ -234,16 +236,16 @@
 
 ### Popular Tags
 
-- `rca` (41 lessons)
-- `telegram` (31 lessons)
+- `rca` (42 lessons)
+- `telegram` (32 lessons)
 - `moltis` (28 lessons)
 - `deploy` (20 lessons)
-- `skills` (18 lessons)
+- `skills` (19 lessons)
 - `github-actions` (18 lessons)
-- `hooks` (16 lessons)
+- `hooks` (17 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `runtime` (13 lessons)
+- `runtime` (14 lessons)
 
 
 ---
@@ -252,10 +254,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 95 |
-| Critical (P0/P1) | 49 |
+| Total Lessons | 96 |
+| Critical (P0/P1) | 50 |
 | Categories | 8 |
-| Unique Tags | 185 |
+| Unique Tags | 187 |
 
 ---
 
