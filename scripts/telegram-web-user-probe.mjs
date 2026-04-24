@@ -18,6 +18,8 @@ const DEFAULT_TIMEOUT_SEC = Number(process.env.TELEGRAM_WEB_TIMEOUT_SECONDS || 4
 const DEFAULT_MIN_REPLY_LEN = Number(process.env.TELEGRAM_WEB_MIN_REPLY_LEN || 2);
 const DEFAULT_COMPOSER_RETRIES = Number(process.env.TELEGRAM_WEB_COMPOSER_RETRIES || 2);
 const DEFAULT_QUIET_WINDOW_MS = Number(process.env.TELEGRAM_WEB_QUIET_WINDOW_MS || 3000);
+const DEFAULT_BASELINE_STABILIZE_MS = Number(process.env.TELEGRAM_WEB_BASELINE_STABILIZE_MS || 1200);
+const DEFAULT_BASELINE_STABILIZE_MAX_WAIT_MS = Number(process.env.TELEGRAM_WEB_BASELINE_STABILIZE_MAX_WAIT_MS || 4000);
 const DEFAULT_REPLY_SETTLE_MS = Number(process.env.TELEGRAM_WEB_REPLY_SETTLE_MS || 5000);
 const DEFAULT_MIN_REPLY_OBSERVATION_MS = Number(process.env.TELEGRAM_WEB_MIN_REPLY_OBSERVATION_MS || 15000);
 const INTERNAL_TELEMETRY_RE =
@@ -48,6 +50,14 @@ const timeoutSec = Number(getArg("--timeout", String(DEFAULT_TIMEOUT_SEC)));
 const minReplyLen = Number(getArg("--min-reply-len", String(DEFAULT_MIN_REPLY_LEN)));
 const composerRetries = Math.max(0, Number(getArg("--composer-retries", String(DEFAULT_COMPOSER_RETRIES))) || 0);
 const quietWindowMs = Math.max(500, Number(getArg("--quiet-window-ms", String(DEFAULT_QUIET_WINDOW_MS))) || 0);
+const baselineStabilizeMs = Math.max(
+  250,
+  Number(getArg("--baseline-stabilize-ms", String(DEFAULT_BASELINE_STABILIZE_MS))) || 0
+);
+const baselineStabilizeMaxWaitMs = Math.max(
+  baselineStabilizeMs,
+  Number(getArg("--baseline-stabilize-max-wait-ms", String(DEFAULT_BASELINE_STABILIZE_MAX_WAIT_MS))) || 0
+);
 const replySettleMs = Math.max(1000, Number(getArg("--reply-settle-ms", String(DEFAULT_REPLY_SETTLE_MS))) || 0);
 const minReplyObservationMs = Math.max(0, Number(getArg("--min-reply-observation-ms", String(DEFAULT_MIN_REPLY_OBSERVATION_MS))) || 0);
 const headed = hasFlag("--headed");
@@ -144,6 +154,14 @@ function maxObservedMid(messages) {
     const mid = safeMid(message?.mid);
     return mid > max ? mid : max;
   }, 0);
+}
+
+function visibleMessagesFingerprint(messages, limit = 16) {
+  return (Array.isArray(messages) ? messages : [])
+    .map(normalizeProbeMessage)
+    .slice(-limit)
+    .map(messageFingerprint)
+    .join("|");
 }
 
 export function findOutgoingProbeMessage(messages, probeText, minMidExclusive = 0) {
@@ -683,6 +701,61 @@ async function waitForQuietWindow(page, quietMs, maxWaitMs, baselineMaxMid) {
   });
 }
 
+export async function stabilizeVisibleBaselineWithCollector({
+  collectMessagesFn,
+  sleepFn,
+  settleMs,
+  maxWaitMs,
+  baselineMaxMid = 0,
+}) {
+  const startedAt = Date.now();
+  let lastFingerprint = null;
+  let lastChangeAt = null;
+  let latestMessages = [];
+  let latestBaselineMaxMid = baselineMaxMid;
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    const messages = await collectMessagesFn();
+    const fingerprint = visibleMessagesFingerprint(messages);
+    const observedBaselineMaxMid = Math.max(baselineMaxMid, maxObservedMid(messages));
+
+    if (fingerprint !== lastFingerprint || observedBaselineMaxMid !== latestBaselineMaxMid) {
+      latestMessages = (Array.isArray(messages) ? messages : []).map(normalizeProbeMessage);
+      latestBaselineMaxMid = observedBaselineMaxMid;
+      lastFingerprint = fingerprint;
+      lastChangeAt = Date.now();
+    }
+
+    if (lastChangeAt !== null && Date.now() - lastChangeAt >= settleMs) {
+      return {
+        ok: true,
+        settleWaitMs: Date.now() - startedAt,
+        baselineMaxMid: latestBaselineMaxMid,
+        messages: latestMessages,
+      };
+    }
+
+    await sleepFn(Math.min(750, Math.max(150, Math.floor(settleMs / 3))));
+  }
+
+  return {
+    ok: false,
+    settleWaitMs: Date.now() - startedAt,
+    baselineMaxMid: latestBaselineMaxMid,
+    messages: latestMessages,
+  };
+}
+
+async function stabilizeVisibleBaseline(page, settleMs, maxWaitMs, baselineMaxMid) {
+  return stabilizeVisibleBaselineWithCollector({
+    collectMessagesFn: () => collectMessages(page),
+    sleepFn: (ms) => page.waitForTimeout(ms),
+    settleMs,
+    maxWaitMs,
+    baselineMaxMid,
+  });
+}
+
 export async function waitForReplySettleWithCollector({
   collectMessagesFn,
   sleepFn,
@@ -1043,13 +1116,20 @@ async function main() {
 
     const initialMessages = await collectMessages(page);
     const initialBaselineMaxMid = maxObservedMid(initialMessages);
+    const stabilizedBaseline = await stabilizeVisibleBaseline(
+      page,
+      baselineStabilizeMs,
+      baselineStabilizeMaxWaitMs,
+      initialBaselineMaxMid
+    );
+    const stabilizedBaselineMaxMid = Math.max(initialBaselineMaxMid, stabilizedBaseline.baselineMaxMid || 0);
 
     stage = "quiet_window";
     const quietWindow = await waitForQuietWindow(
       page,
       quietWindowMs,
       Math.min(timeoutSec * 1000, Math.max(quietWindowMs * 4, 12_000)),
-      initialBaselineMaxMid
+      stabilizedBaselineMaxMid
     );
 
     if (!quietWindow.ok) {

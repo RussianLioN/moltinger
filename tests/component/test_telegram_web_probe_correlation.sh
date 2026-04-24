@@ -323,6 +323,52 @@ NODE
         test_fail "Quiet window should wait for late pre-send activity to settle before probe attribution starts"
     fi
 
+    test_start "component_telegram_web_probe_stabilizes_visible_baseline_before_quiet_window"
+    if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
+import process from "node:process";
+const { stabilizeVisibleBaselineWithCollector, waitForQuietWindowWithCollector } = await import(process.env.NODE_SCRIPT);
+
+const hydrationSnapshots = [
+  [],
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+];
+let hydrationIndex = 0;
+const baseline = await stabilizeVisibleBaselineWithCollector({
+  collectMessagesFn: async () => hydrationSnapshots[Math.min(hydrationIndex++, hydrationSnapshots.length - 1)],
+  sleepFn: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  settleMs: 100,
+  maxWaitMs: 1000,
+  baselineMaxMid: 0,
+});
+if (!baseline.ok || baseline.baselineMaxMid !== 221721) {
+  throw new Error(`expected hydrated baseline to stabilize on historical bubble, got ${JSON.stringify(baseline)}`);
+}
+
+const quietSnapshots = [
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+  [{ mid: 221721, direction: "in", text: "Не могу создать в этой сессии: create_skill сломан и возвращает missing 'name' даже при корректном вызове." }],
+];
+let quietIndex = 0;
+const quietWindow = await waitForQuietWindowWithCollector({
+  collectMessagesFn: async () => quietSnapshots[Math.min(quietIndex++, quietSnapshots.length - 1)],
+  sleepFn: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  quietMs: 120,
+  maxWaitMs: 900,
+  baselineMaxMid: baseline.baselineMaxMid,
+});
+if (!quietWindow.ok || quietWindow.lastActivity !== null) {
+  throw new Error(`expected quiet window to ignore hydrated historical bubble after baseline stabilization, got ${JSON.stringify(quietWindow)}`);
+}
+NODE
+    then
+        test_pass
+    else
+        test_fail "Probe must stabilize the visible baseline before quiet-window guards so historical hydrated bubbles do not trip pre-send invalid-activity fails"
+    fi
+
     test_start "component_telegram_web_probe_fails_when_chat_never_quiets"
     if NODE_SCRIPT="$NODE_SCRIPT" node --input-type=module <<'NODE'
 import process from "node:process";

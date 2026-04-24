@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 96
+**Total Lessons**: 97
 
 ---
 
@@ -228,6 +228,9 @@
 - [Child worktree reconciliation renames authoritative feature worktree](../docs/rca/2026-03-08-topology-child-worktree-identity-drift.md)
 - [Команда false завершилась с кодом 1](../docs/rca/2026-03-07-false-command-exit-code.md)
 
+#### telegram (1 lessons)
+- [Telegram Web probe treated hydrated historical chat bubbles as fresh pre-send invalid activity](../docs/rca/2026-04-24-telegram-web-probe-baseline-hydration-false-invalid-activity.md)
+
 #### tooling (3 lessons)
 - [Worktree plan helper treated the default branch as a similar slug candidate](../docs/rca/2026-04-15-worktree-plan-helper-treated-default-branch-as-similar-slug-candidate.md)
 - [Worktree cleanup helper treated derived branch-only path as a path/branch conflict](../docs/rca/2026-04-15-worktree-cleanup-helper-treated-derived-branch-path-as-conflict.md)
@@ -237,7 +240,7 @@
 ### Popular Tags
 
 - `rca` (42 lessons)
-- `telegram` (32 lessons)
+- `telegram` (33 lessons)
 - `moltis` (28 lessons)
 - `deploy` (20 lessons)
 - `skills` (19 lessons)
@@ -254,10 +257,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 96 |
+| Total Lessons | 97 |
 | Critical (P0/P1) | 50 |
-| Categories | 8 |
-| Unique Tags | 187 |
+| Categories | 9 |
+| Unique Tags | 190 |
 
 ---
 
