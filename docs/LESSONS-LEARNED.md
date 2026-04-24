@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 92
+**Total Lessons**: 93
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (45 lessons)
+#### P1 (46 lessons)
+- [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram Web probe collapsed multiline /status replies before exact semantic review](../docs/rca/2026-04-23-telegram-web-probe-collapsed-multiline-status-contract.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
@@ -196,7 +197,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (8 lessons)
+#### product (9 lessons)
+- [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
 - [Telegram direct fastpath BeforeLLMCall block assumption was superseded by the official shell-hook contract](../docs/rca/2026-04-23-telegram-direct-fastpath-before-llm-must-block.md)
 - [Moltis tool argument envelope drift surfaced as missing required parameters](../docs/rca/2026-04-23-moltis-tool-argument-envelope-drift.md)
@@ -228,15 +230,15 @@
 
 ### Popular Tags
 
-- `rca` (38 lessons)
-- `telegram` (28 lessons)
+- `rca` (39 lessons)
+- `telegram` (29 lessons)
 - `moltis` (28 lessons)
 - `deploy` (20 lessons)
 - `github-actions` (18 lessons)
+- `skills` (16 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `skills` (15 lessons)
-- `hooks` (13 lessons)
+- `hooks` (14 lessons)
 - `beads` (12 lessons)
 
 
@@ -246,10 +248,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 92 |
-| Critical (P0/P1) | 46 |
+| Total Lessons | 93 |
+| Critical (P0/P1) | 47 |
 | Categories | 8 |
-| Unique Tags | 180 |
+| Unique Tags | 181 |
 
 ---
 

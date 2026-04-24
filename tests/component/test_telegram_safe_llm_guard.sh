@@ -3481,6 +3481,47 @@ EOF
         test_fail "AfterLLMCall guard must directly execute Telegram-safe native skill CRUD, send one clean user-facing summary, and suppress the later raw tool tail"
     fi
 
+    test_start "component_after_llm_guard_recovers_sparse_skill_create_when_llm_returns_empty_turn"
+    local after_sparse_create_empty_dir after_sparse_create_empty_runtime after_sparse_create_empty_send after_sparse_create_empty_log after_sparse_create_empty_output after_sparse_create_empty_skill_file
+    after_sparse_create_empty_dir="$(secure_temp_dir telegram-safe-after-sparse-create-empty)"
+    after_sparse_create_empty_runtime="$after_sparse_create_empty_dir/runtime"
+    after_sparse_create_empty_send="$after_sparse_create_empty_dir/send.sh"
+    after_sparse_create_empty_log="$after_sparse_create_empty_dir/send.log"
+    after_sparse_create_empty_skill_file="$after_sparse_create_empty_runtime/moltis-version-watch-20260424/SKILL.md"
+    cat >"$after_sparse_create_empty_send" <<'EOF'
+#!/usr/bin/env bash
+printf 'send %s\n' "$*" >>"$FASTPATH_LOG"
+exit 0
+EOF
+    chmod +x "$after_sparse_create_empty_send"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_sparse_create_empty_dir/intent" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:after-sparse-create-empty","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай новый навык moltis-version-watch-20260424 для автоматического отслеживания новой версии Moltis."}],"tool_count":37,"iteration":1}}
+EOF
+    after_sparse_create_empty_output="$(
+        env PATH="$MINIMAL_PATH:/usr/bin" \
+            FASTPATH_LOG="$after_sparse_create_empty_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$after_sparse_create_empty_runtime" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_sparse_create_empty_send" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_sparse_create_empty_dir/intent" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:after-sparse-create-empty","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай новый навык moltis-version-watch-20260424 для автоматического отслеживания новой версии Moltis."}],"text":"","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_sparse_create_empty_output" && \
+       [[ -f "$after_sparse_create_empty_skill_file" ]] && \
+       grep -Fq 'name: moltis-version-watch-20260424' "$after_sparse_create_empty_skill_file" && \
+       grep -Fq 'Создал базовый шаблон навыка `moltis-version-watch-20260424`.' "$after_sparse_create_empty_log"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall guard must recover sparse Telegram skill creation when the model returns an empty turn, so valid create requests do not end in a silent hole"
+    fi
+
     test_start "component_after_llm_guard_direct_executes_update_and_delete_skill_crud_when_direct_fastpath_is_available"
     local after_skill_crud_edit_dir after_skill_crud_edit_runtime after_skill_crud_edit_send after_skill_crud_edit_log after_skill_crud_edit_update_output after_skill_crud_edit_delete_output after_skill_crud_edit_skill_file
     after_skill_crud_edit_dir="$(secure_temp_dir telegram-safe-after-skill-crud-edit)"
