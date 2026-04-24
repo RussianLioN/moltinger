@@ -2879,6 +2879,13 @@ run_component_telegram_remote_uat_contract_tests() {
         test_fail "Deploy workflow must keep the Telegram Web scheduler disabled by default"
     fi
 
+    test_start "component_telegram_remote_uat_perl_utf8_matchers_do_not_depend_on_encode_pm"
+    if ! grep -Fq -- '-MEncode=' "$WRAPPER_SCRIPT" && ! grep -Fq 'use Encode' "$WRAPPER_SCRIPT"; then
+        test_pass
+    else
+        test_fail "Authoritative Telegram UAT wrapper must not depend on Encode.pm because the live Moltis container does not ship that module"
+    fi
+
     generate_report
 }
 

@@ -1044,7 +1044,7 @@ text_matches_extended_regex() {
 
     if command -v perl >/dev/null 2>&1; then
         TEXT_MATCH_TEXT="$text" TEXT_MATCH_PATTERN="$pattern" \
-            perl -CSDA -MEncode=decode,FB_CROAK -e '
+            perl -CSDA -e '
                 use strict;
                 use warnings;
                 use utf8;
@@ -1053,13 +1053,10 @@ text_matches_extended_regex() {
                 my $raw_pattern = $ENV{TEXT_MATCH_PATTERN} // q();
                 exit 2 unless length $raw_pattern;
 
-                my ($text, $pattern) = eval {
-                    (
-                        decode("UTF-8", $raw_text, FB_CROAK),
-                        decode("UTF-8", $raw_pattern, FB_CROAK),
-                    );
-                };
-                exit 2 if $@;
+                my $text = $raw_text;
+                my $pattern = $raw_pattern;
+                exit 2 unless utf8::decode($text);
+                exit 2 unless utf8::decode($pattern);
 
                 my $matched = eval {
                     my $re = qr{$pattern}iu;
