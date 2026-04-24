@@ -195,6 +195,151 @@ extract_json_string_field_from_text() {
     '
 }
 
+extract_top_level_json_string_field_from_text() {
+    local source_text="${1:-}"
+    local key="${2:-}"
+    local perl_output=""
+
+    [[ -n "$source_text" && -n "$key" ]] || return 1
+
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$source_text" | perl -MJSON::PP=decode_json -e '
+                use strict;
+                use warnings;
+                use utf8;
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
+
+                my $key = shift @ARGV // q();
+                exit 1 unless length $key;
+
+                local $/;
+                my $text = <STDIN> // q();
+                my $object = eval { decode_json($text) };
+                exit 1 unless ref $object eq "HASH";
+
+                my $value = $object->{$key};
+                exit 1 if ref $value;
+                exit 1 unless defined $value && length $value;
+                print $value;
+            ' -- "$key" 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s' "$perl_output"
+            return 0
+        fi
+    fi
+
+    printf '%s' "$source_text" | awk -v key="$key" '
+        BEGIN {
+            RS = ""
+            ORS = ""
+            needle = "\"" key "\""
+            depth = 0
+            in_string = 0
+            escape = 0
+            state = "seek"
+            value = ""
+        }
+        {
+            text = $0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+
+                if (state == "capture") {
+                    if (escape) {
+                        if (c == "n") {
+                            value = value "\n"
+                        } else if (c == "r") {
+                            value = value "\r"
+                        } else if (c == "t") {
+                            value = value "\t"
+                        } else {
+                            value = value c
+                        }
+                        escape = 0
+                        continue
+                    }
+
+                    if (c == "\\") {
+                        escape = 1
+                        continue
+                    }
+
+                    if (c == "\"") {
+                        print value
+                        exit 0
+                    }
+
+                    value = value c
+                    continue
+                }
+
+                if (!in_string && depth == 1 && substr(text, i, length(needle)) == needle) {
+                    j = i + length(needle)
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != ":") {
+                        continue
+                    }
+                    j++
+                    while (j <= n && substr(text, j, 1) ~ /[ \t\r\n]/) {
+                        j++
+                    }
+                    if (substr(text, j, 1) != "\"") {
+                        continue
+                    }
+
+                    state = "capture"
+                    value = ""
+                    escape = 0
+                    i = j
+                    continue
+                }
+
+                if (escape) {
+                    escape = 0
+                    continue
+                }
+
+                if (c == "\\") {
+                    escape = 1
+                    continue
+                }
+
+                if (c == "\"") {
+                    in_string = !in_string
+                    continue
+                }
+
+                if (in_string) {
+                    continue
+                }
+
+                if (c == "{") {
+                    depth++
+                    continue
+                }
+
+                if (c == "}") {
+                    depth--
+                    continue
+                }
+
+                if (depth != 1) {
+                    continue
+                }
+            }
+        }
+        END {
+            exit 1
+        }
+    '
+}
+
 extract_first_number() {
     local key="$1"
     local match
@@ -4282,12 +4427,51 @@ tool_call_has_missing_required_arguments() {
 
 extract_tool_call_names() {
     local tool_calls_json="${1:-}"
+    local perl_output=""
+    local tool_call_json=""
+    local tool_name=""
 
     [[ -n "$tool_calls_json" && "$tool_calls_json" != "[]" ]] || return 1
 
-    printf '%s' "$tool_calls_json" \
-        | grep -oE '(^|[\[,])[[:space:]]*\{[[:space:]]*"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
-        | sed -E 's/^.*"name"[[:space:]]*:[[:space:]]*"//; s/"$//'
+    if command -v perl >/dev/null 2>&1; then
+        perl_output="$(
+            printf '%s' "$tool_calls_json" | perl -MJSON::PP=decode_json -e '
+                use strict;
+                use warnings;
+                use utf8;
+                binmode STDIN, ":encoding(UTF-8)";
+                binmode STDOUT, ":encoding(UTF-8)";
+
+                local $/;
+                my $text = <STDIN> // q();
+                my $tool_calls = eval { decode_json($text) };
+                exit 1 unless ref $tool_calls eq "ARRAY";
+
+                my @names = ();
+                for my $entry (@$tool_calls) {
+                    next unless ref $entry eq "HASH";
+                    my $name = $entry->{name};
+                    next if ref $name;
+                    next unless defined $name && length $name;
+                    push @names, $name;
+                }
+
+                exit 1 unless @names;
+                print join qq(\n), @names;
+            ' 2>/dev/null
+        )" || true
+        if [[ -n "$perl_output" ]]; then
+            printf '%s\n' "$perl_output"
+            return 0
+        fi
+    fi
+
+    while IFS= read -r tool_call_json; do
+        [[ -n "$tool_call_json" ]] || continue
+        tool_name="$(extract_top_level_json_string_field_from_text "$tool_call_json" "name" || true)"
+        [[ -n "$tool_name" ]] || continue
+        printf '%s\n' "$tool_name"
+    done < <(extract_json_objects_from_array "$tool_calls_json" || true)
 }
 
 current_turn_requires_native_skill_tools_only() {

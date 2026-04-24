@@ -1,7 +1,7 @@
 # Lessons Learned (Auto-generated)
 
 **Generated**: 2026-04-24
-**Total Lessons**: 94
+**Total Lessons**: 95
 
 ---
 
@@ -14,7 +14,8 @@
 #### P0 (1 lessons)
 - [Unauthorized File Deletion Attempt](../docs/rca/2026-03-04-unauthorized-file-deletion-attempt.md)
 
-#### P1 (47 lessons)
+#### P1 (48 lessons)
+- [Telegram skill CRUD fastpath depended on JSON field order when extracting tool call names](../docs/rca/2026-04-24-telegram-tool-call-name-extraction-depended-on-json-field-order.md)
 - [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram sparse skill create recovery still depended on the current-turn user message instead of persisted CRUD intent](../docs/rca/2026-04-24-telegram-sparse-create-recovery-needed-persisted-crud-intent.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
@@ -198,7 +199,8 @@
 - [Повторный запрос уже документированных секретов](../docs/rca/2026-03-07-context-discovery-before-user-questions.md)
 - [Token Bloat в инструкциях — повторяющаяся проблема](../docs/rca/2026-03-04-token-bloat-recurring.md)
 
-#### product (10 lessons)
+#### product (11 lessons)
+- [Telegram skill CRUD fastpath depended on JSON field order when extracting tool call names](../docs/rca/2026-04-24-telegram-tool-call-name-extraction-depended-on-json-field-order.md)
 - [Telegram sparse skill create could still go silent because empty LLM turns had no repo-owned recovery](../docs/rca/2026-04-24-telegram-sparse-skill-create-empty-turn-had-no-owned-recovery.md)
 - [Telegram sparse skill create recovery still depended on the current-turn user message instead of persisted CRUD intent](../docs/rca/2026-04-24-telegram-sparse-create-recovery-needed-persisted-crud-intent.md)
 - [Telegram skill CRUD still failed because live runtime did not authoritatively apply BeforeToolCall modify](../docs/rca/2026-04-24-telegram-skill-crud-before-tool-modify-was-not-authoritative.md)
@@ -232,16 +234,16 @@
 
 ### Popular Tags
 
-- `rca` (40 lessons)
-- `telegram` (30 lessons)
+- `rca` (41 lessons)
+- `telegram` (31 lessons)
 - `moltis` (28 lessons)
 - `deploy` (20 lessons)
+- `skills` (18 lessons)
 - `github-actions` (18 lessons)
-- `skills` (17 lessons)
+- `hooks` (16 lessons)
 - `gitops` (16 lessons)
 - `cicd` (16 lessons)
-- `hooks` (15 lessons)
-- `runtime` (12 lessons)
+- `runtime` (13 lessons)
 
 
 ---
@@ -250,10 +252,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lessons | 94 |
-| Critical (P0/P1) | 48 |
+| Total Lessons | 95 |
+| Critical (P0/P1) | 49 |
 | Categories | 8 |
-| Unique Tags | 182 |
+| Unique Tags | 185 |
 
 ---
 
