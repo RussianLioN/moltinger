@@ -3444,6 +3444,23 @@ EOF
         test_fail "AfterLLMCall guard must let the latest skill-visibility turn win over stale /status history and persisted status intent"
     fi
 
+    test_start "component_after_llm_guard_rewrites_overbroad_skill_visibility_inventory_even_when_model_mentions_real_runtime_skills"
+    local after_skill_visibility_overbroad_output
+    after_skill_visibility_overbroad_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:skill-visibility-overbroad","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"base system"},{"role":"user","content":"Какие у тебя сейчас есть навыки?"}],"text":"Навыки: codex-update, telegram-learner, docker-expert, prompt-engineer, devops-guardian. Могу показать ещё скрытые системные навыки.","tool_calls":[]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_visibility_overbroad_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_visibility_overbroad_output" && \
+       jq -e '.data.text == "Навыки (2): codex-update, telegram-learner."' >/dev/null 2>&1 <<<"$after_skill_visibility_overbroad_output"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall skill visibility override must ignore overbroad model inventories and always answer from the runtime skill snapshot"
+    fi
+
     test_start "component_after_llm_guard_preserves_allowlisted_skill_tool_calls_while_rewriting_progress_text"
     local after_skill_tool_output
     after_skill_tool_output="$(
@@ -3502,6 +3519,48 @@ EOF
         test_pass
     else
         test_fail "AfterLLMCall guard must directly execute Telegram-safe native skill CRUD, send one clean user-facing summary, and suppress the later raw tool tail"
+    fi
+
+    test_start "component_after_llm_guard_restores_session_chat_id_for_live_shaped_direct_skill_crud_payload"
+    local after_skill_crud_live_dir after_skill_crud_live_runtime after_skill_crud_live_send after_skill_crud_live_log after_skill_crud_live_output after_skill_crud_live_skill_file
+    after_skill_crud_live_dir="$(secure_temp_dir telegram-safe-after-skill-crud-live)"
+    after_skill_crud_live_runtime="$after_skill_crud_live_dir/runtime"
+    after_skill_crud_live_send="$after_skill_crud_live_dir/send.sh"
+    after_skill_crud_live_log="$after_skill_crud_live_dir/send.log"
+    after_skill_crud_live_skill_file="$after_skill_crud_live_runtime/moltis-live-shaped/SKILL.md"
+    cat >"$after_skill_crud_live_send" <<'EOF'
+#!/usr/bin/env bash
+printf 'send %s\n' "$*" >>"$FASTPATH_LOG"
+exit 0
+EOF
+    chmod +x "$after_skill_crud_live_send"
+    env PATH="$MINIMAL_PATH" \
+        MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_live_dir/intent" \
+        MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+        bash "$HOOK_SCRIPT" <<'EOF' >/dev/null
+{"event":"BeforeLLMCall","data":{"session_key":"session:after-skill-crud-live","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=test | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай навык moltis-live-shaped для проверки live-shaped AfterLLM payload."}],"tool_count":37,"iteration":1}}
+EOF
+    after_skill_crud_live_output="$(
+        env PATH="$MINIMAL_PATH:/usr/bin" \
+            FASTPATH_LOG="$after_skill_crud_live_log" \
+            MOLTIS_RUNTIME_SKILLS_ROOT="$after_skill_crud_live_runtime" \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_FASTPATH=true \
+            MOLTIS_TELEGRAM_SAFE_DIRECT_SEND_SCRIPT="$after_skill_crud_live_send" \
+            MOLTIS_TELEGRAM_SAFE_LLM_GUARD_INTENT_DIR="$after_skill_crud_live_dir/intent" \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"AfterLLMCall","data":{"session_key":"session:after-skill-crud-live","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"The current user datetime is 2026-04-24 06:07:59 MSK."}],"text":"Сначала создам навык, потом дам краткий итог.","tool_calls":[{"arguments":{"name":"moltis-live-shaped","body":"---\nname: moltis-live-shaped\ndescription: Проверка live-shaped AfterLLM payload.\n---\n# moltis-live-shaped\n"},"id":"call_live_shaped_create","name":"create_skill"}]}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$after_skill_crud_live_output" && \
+       jq -e '.data.text == ""' >/dev/null 2>&1 <<<"$after_skill_crud_live_output" && \
+       jq -e '.data.tool_calls == []' >/dev/null 2>&1 <<<"$after_skill_crud_live_output" && \
+       [[ -f "$after_skill_crud_live_skill_file" ]] && \
+       grep -Fq 'name: moltis-live-shaped' "$after_skill_crud_live_skill_file" && \
+       grep -Fq -- '--chat-id 262872984' "$after_skill_crud_live_log" && \
+       grep -Fq 'Создал базовый шаблон навыка `moltis-live-shaped`.' "$after_skill_crud_live_log"; then
+        test_pass
+    else
+        test_fail "AfterLLMCall direct skill CRUD must restore the Telegram chat_id from persisted session state when the live-shaped payload omits chat metadata"
     fi
 
     test_start "component_after_llm_guard_recovers_sparse_skill_create_when_live_after_llm_payload_omits_user_message"

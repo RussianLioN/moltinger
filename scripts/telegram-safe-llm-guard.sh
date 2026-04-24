@@ -1785,6 +1785,16 @@ terminal_file_path() {
 
     printf '%s/%s.terminal' "$INTENT_DIR" "$safe_key"
 }
+
+chat_file_path() {
+    local raw_key="${1:-}"
+    local safe_key=""
+
+    safe_key="$(sanitize_intent_key "$raw_key" || true)"
+    [[ -n "$safe_key" ]] || return 1
+
+    printf '%s/%s.chat' "$INTENT_DIR" "$safe_key"
+}
 persist_safe_lane_marker() {
     local raw_key="${1:-}"
     local lane_file=""
@@ -2235,6 +2245,55 @@ clear_turn_intent() {
     [[ -n "$intent_file" ]] || return 0
 
     rm -f "$intent_file" 2>/dev/null || true
+}
+
+persist_turn_chat_id() {
+    local raw_key="${1:-}"
+    local chat_id="${2:-}"
+    local chat_file=""
+
+    [[ -n "$raw_key" && -n "$chat_id" ]] || return 0
+
+    chat_file="$(chat_file_path "$raw_key" || true)"
+    [[ -n "$chat_file" ]] || return 0
+
+    if ! mkdir -p "$INTENT_DIR" 2>/dev/null; then
+        write_audit_line "chat_id_set_failed key=$(basename "$chat_file") chat_id=$chat_id reason=mkdir"
+        return 0
+    fi
+    if ! printf '%s\t%s\n' "$(date +%s)" "$chat_id" 2>/dev/null >"$chat_file"; then
+        rm -f "$chat_file" 2>/dev/null || true
+        write_audit_line "chat_id_set_failed key=$(basename "$chat_file") chat_id=$chat_id reason=write"
+        return 0
+    fi
+    write_audit_line "chat_id_set key=$(basename "$chat_file") chat_id=$chat_id"
+    return 0
+}
+
+load_turn_chat_id() {
+    local raw_key="${1:-}"
+    local chat_file=""
+    local stored_epoch=""
+    local stored_chat_id=""
+    local now_epoch=0
+    local age_sec=0
+
+    [[ -n "$raw_key" ]] || return 1
+
+    chat_file="$(chat_file_path "$raw_key" || true)"
+    [[ -n "$chat_file" && -f "$chat_file" ]] || return 1
+
+    IFS=$'\t' read -r stored_epoch stored_chat_id <"$chat_file" || return 1
+    [[ "$stored_epoch" =~ ^[0-9]+$ && -n "$stored_chat_id" ]] || return 1
+
+    now_epoch="$(date +%s)"
+    age_sec=$((now_epoch - stored_epoch))
+    if (( age_sec < 0 || age_sec > INTENT_TTL_SEC )); then
+        rm -f "$chat_file" 2>/dev/null || true
+        return 1
+    fi
+
+    printf '%s' "$stored_chat_id"
 }
 
 format_skill_native_crud_turn_intent() {
@@ -3634,7 +3693,7 @@ attempt_direct_skill_crud_after_llm_fastpath() {
 
     [[ -n "$direct_tool_calls_json" && "$direct_tool_calls_json" != "[]" ]] || return 1
 
-    telegram_chat_id="${system_chat_id:-${current_chat_id:-}}"
+    telegram_chat_id="${current_chat_id:-${system_chat_id:-${persisted_turn_chat_id:-}}}"
     [[ -n "$telegram_chat_id" ]] || return 1
 
     direct_skill_crud_result_json="$(execute_direct_skill_tool_calls_json "$direct_tool_calls_json" || true)"
@@ -4848,6 +4907,7 @@ persisted_turn_intent="$(load_turn_intent "${turn_session_key:-}" || true)"
 persisted_turn_fingerprint="$(load_turn_intent_fingerprint "${turn_session_key:-}" || true)"
 persisted_delivery_suppression="$(load_delivery_suppression "${turn_session_key:-}" || true)"
 persisted_terminal_marker="$(load_terminal_marker "${turn_session_key:-}" || true)"
+persisted_turn_chat_id="$(load_turn_chat_id "${turn_session_key:-}" || true)"
 loaded_persisted_codex_update_request=false
 loaded_persisted_codex_update_scheduler_request=false
 loaded_persisted_codex_update_context_request=false
@@ -4889,6 +4949,17 @@ if [[ -z "$delivery_chat_id" ]]; then
     delivery_chat_id="$(extract_first_number to || true)"
 fi
 current_chat_id="${delivery_chat_id:-${system_chat_id:-$channel_binding_chat_id}}"
+restored_session_chat_id=false
+if [[ -z "$current_chat_id" && -n "$persisted_turn_chat_id" ]]; then
+    current_chat_id="$persisted_turn_chat_id"
+    restored_session_chat_id=true
+fi
+if [[ -n "${turn_session_key:-}" && -n "$current_chat_id" ]]; then
+    persist_turn_chat_id "${turn_session_key:-}" "$current_chat_id"
+fi
+if [[ "$restored_session_chat_id" == true ]]; then
+    write_audit_line "chat_id_restored source=session key=${turn_session_key:-missing} event=$event chat_id=$current_chat_id"
+fi
 persisted_chat_delivery_suppression="$(load_delivery_suppression_for_chat "${current_chat_id:-}" || true)"
 effective_delivery_suppression="${persisted_delivery_suppression:-$persisted_chat_delivery_suppression}"
 has_current_user_turn=false
@@ -5485,7 +5556,7 @@ if [[ "$event" == "MessageReceived" ]]; then
 fi
 
 if [[ "$event" == "BeforeLLMCall" ]]; then
-    telegram_chat_id="${system_chat_id:-}"
+    telegram_chat_id="${system_chat_id:-${current_chat_id:-}}"
     next_turn_intent=""
     if [[ "$looks_like_status" == true ]]; then
         next_turn_intent="status"
@@ -5971,9 +6042,12 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
     if [[ "$looks_like_skill_visibility_request" == true || "$has_skill_visibility_generic_mismatch" == true ]]; then
         skill_snapshot_csv="$(discover_runtime_skill_names_csv || true)"
         if [[ -n "$skill_snapshot_csv" || "$has_skill_visibility_generic_mismatch" == true || "$looks_like_skill_visibility_request" == true ]]; then
-            if [[ "$has_skill_path_false_negative" == true || "$has_skill_visibility_generic_mismatch" == true ]] || \
-               ! reply_mentions_any_skill_from_csv "$response_text_flat" "$skill_snapshot_csv"; then
-                visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
+            visibility_reply_text="$(build_skill_visibility_reply_text "$skill_snapshot_csv")"
+            if [[ "$looks_like_skill_visibility_request" == true && -n "$persisted_skill_create_state" ]]; then
+                write_audit_line "intent_clear reason=skill_visibility_followup_consumed_create_intent skill=$requested_skill_name state=$persisted_skill_create_state"
+                clear_turn_intent "${turn_session_key:-}"
+            fi
+            if [[ "$has_skill_path_false_negative" == true || "$has_skill_visibility_generic_mismatch" == true || "${response_text:-}" != "$visibility_reply_text" ]]; then
                 write_audit_line "emit_modify event=$event reason=skill_visibility_reply_override snapshot_count=$(count_skill_names_csv "$skill_snapshot_csv") false_negative=$has_skill_path_false_negative generic_mismatch=$has_skill_visibility_generic_mismatch"
                 if [[ "$event" == "AfterLLMCall" ]]; then
                     emit_modified_payload "$visibility_reply_text" true
@@ -5981,10 +6055,6 @@ if [[ "$event" == "AfterLLMCall" || "$event" == "MessageSending" ]]; then
                     emit_modified_payload "$visibility_reply_text" false
                 fi
                 exit 0
-            fi
-            if [[ "$looks_like_skill_visibility_request" == true && -n "$persisted_skill_create_state" ]]; then
-                write_audit_line "intent_clear reason=skill_visibility_followup_consumed_create_intent skill=$requested_skill_name state=$persisted_skill_create_state"
-                clear_turn_intent "${turn_session_key:-}"
             fi
         fi
     fi
