@@ -2770,6 +2770,29 @@ EOF
         test_fail "BeforeLLMCall guard must keep create follow-ups on the native tool lane, clear stale visibility intent, and persist only the current native CRUD lane without scaffold writes"
     fi
 
+    test_start "component_before_llm_guard_resets_sparse_create_history_after_stale_create_failure"
+    local stale_create_failure_output
+    stale_create_failure_output="$(
+        env PATH="$MINIMAL_PATH" \
+            MOLTIS_TELEGRAM_SAFE_SKILL_SNAPSHOT_NAMES='codex-update,telegram-learner' \
+            bash "$HOOK_SCRIPT" <<'EOF'
+{"event":"BeforeLLMCall","data":{"session_key":"session:create-history-regression","provider":"openai-codex","model":"openai-codex::gpt-5.4","messages":[{"role":"system","content":"Host: host=00cde7cf989d | channel_account=moltis-bot | channel_chat_id=262872984 | data_dir=/home/moltis/.moltis"},{"role":"user","content":"Создай новый навык codex-update-old-failed"},{"role":"assistant","content":"Не смог создать: `create_skill` в этой сессии тоже сломан и вернул `missing 'name'` при корректном вызове."},{"role":"user","content":"Создай новый навык moltis-version-watch-20260424-tele-a1 для автоматического отслеживания новой версии Moltis."}],"tool_count":37,"iteration":1}}
+EOF
+    )"
+    if jq -e '.action == "modify"' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.tool_count == 37' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.messages | length == 4' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.messages[0].content | contains("Telegram-safe skill runtime note")' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.messages[1].content | contains("Telegram-safe skill-authoring contract")' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.messages[2].content | contains("Telegram-safe sparse create-skill override")' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '.data.messages[3].content == "Создай новый навык moltis-version-watch-20260424-tele-a1 для автоматического отслеживания новой версии Moltis."' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '[.data.messages[].content] | any(contains("codex-update-old-failed")) | not' >/dev/null 2>&1 <<<"$stale_create_failure_output" && \
+       jq -e '[.data.messages[].content] | any(contains("missing '\''name'\''")) | not' >/dev/null 2>&1 <<<"$stale_create_failure_output"; then
+        test_pass
+    else
+        test_fail "BeforeLLMCall guard must reset sparse create history when stale create_skill failure traces would contaminate the next native CRUD attempt"
+    fi
+
     test_start "component_message_sending_guard_drops_legacy_skill_create_intent_rewrite"
     local skill_create_intent_dir skill_create_intent_output
     skill_create_intent_dir="$(secure_temp_dir telegram-safe-skill-create-intent)"
