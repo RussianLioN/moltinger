@@ -28,6 +28,26 @@ on:
         required: true
         default: "0"
         type: string
+      backfill_limit:
+        description: "Optional oldest-to-newest history batch size; 0 disables backfill"
+        required: true
+        default: "0"
+        type: string
+      backfill_min_id:
+        description: "Exclusive lower message id for resumable forward backfill"
+        required: true
+        default: "0"
+        type: string
+      backfill_max_id:
+        description: "Exclusive upper message id for bounded backfill; 0 means no upper bound"
+        required: true
+        default: "0"
+        type: string
+      wait_time:
+        description: "Optional Telethon wait_time between history requests; 0 uses library default"
+        required: true
+        default: "0"
+        type: string
       artifact_name:
         description: "Artifact name"
         required: true
@@ -68,11 +88,20 @@ jobs:
             query_args+=(--query "$query")
           done <<< "${{ inputs.queries }}"
 
+          wait_time_arg=()
+          if [[ -n "${{ inputs.wait_time }}" && "${{ inputs.wait_time }}" != "0" ]]; then
+            wait_time_arg=(--wait-time "${{ inputs.wait_time }}")
+          fi
+
           python3 scripts/telegram-channel-collect.py \
             --channel "${{ inputs.channel }}" \
             --limit "${{ inputs.limit }}" \
             --scan-limit "${{ inputs.scan_limit }}" \
+            --backfill-limit "${{ inputs.backfill_limit }}" \
+            --backfill-min-id "${{ inputs.backfill_min_id }}" \
+            --backfill-max-id "${{ inputs.backfill_max_id }}" \
             --output-dir "$result_dir" \
+            "${wait_time_arg[@]}" \
             "${query_args[@]}"
 
       - name: Upload channel research artifact

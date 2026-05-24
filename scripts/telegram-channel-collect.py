@@ -31,6 +31,7 @@ TOKENISH_RE = re.compile(r"\b(?:api[_-]?hash|api[_-]?key|token|password|secret)=
 
 @dataclass
 class MessageRecord:
+    source_mode: str
     query: str | None
     id: int
     date: str | None
@@ -55,6 +56,30 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Optional latest-message scan limit without search. 0 disables full/latest scan.",
+    )
+    parser.add_argument(
+        "--backfill-limit",
+        type=int,
+        default=0,
+        help="Oldest-to-newest channel history batch size. 0 disables backfill.",
+    )
+    parser.add_argument(
+        "--backfill-min-id",
+        type=int,
+        default=0,
+        help="Exclusive lower message id for resumable forward backfill.",
+    )
+    parser.add_argument(
+        "--backfill-max-id",
+        type=int,
+        default=0,
+        help="Exclusive upper message id for bounded historical backfill. 0 means no upper bound.",
+    )
+    parser.add_argument(
+        "--wait-time",
+        type=float,
+        default=None,
+        help="Optional Telethon wait_time between history requests for large runs.",
     )
     parser.add_argument("--output-dir", required=True, help="Directory for raw and summary artifacts")
     parser.add_argument("--summary-limit", type=int, default=80, help="Max rows in Markdown summary")
@@ -148,7 +173,7 @@ def media_info(message: Any) -> tuple[str | None, str | None, str | None, int | 
     return kind, file_name, getattr(document, "mime_type", None), getattr(document, "size", None)
 
 
-def to_record(query: str | None, username: str | None, message: Any) -> MessageRecord:
+def to_record(source_mode: str, query: str | None, username: str | None, message: Any) -> MessageRecord:
     raw_text = getattr(message, "raw_text", None) or ""
     kind, file_name, mime_type, file_size = media_info(message)
     dt = getattr(message, "date", None)
@@ -158,6 +183,7 @@ def to_record(query: str | None, username: str | None, message: Any) -> MessageR
         date_value = None
     message_id = int(getattr(message, "id", 0) or 0)
     return MessageRecord(
+        source_mode=source_mode,
         query=query,
         id=message_id,
         date=date_value,
@@ -182,8 +208,12 @@ def write_jsonl(path: Path, records: list[MessageRecord]) -> None:
 
 def write_summary(path: Path, *, channel: str, username: str | None, records: list[MessageRecord], args: argparse.Namespace) -> None:
     by_query: dict[str, int] = {}
+    by_mode: dict[str, int] = {}
     for record in records:
-        by_query[record.query or "(latest-scan)"] = by_query.get(record.query or "(latest-scan)", 0) + 1
+        by_query[record.query or f"({record.source_mode})"] = by_query.get(record.query or f"({record.source_mode})", 0) + 1
+        by_mode[record.source_mode] = by_mode.get(record.source_mode, 0) + 1
+    message_ids = sorted(record.id for record in records if record.id)
+    dates = sorted(record.date for record in records if record.date)
 
     lines = [
         "# Telegram Channel Collection Summary",
@@ -194,11 +224,32 @@ def write_summary(path: Path, *, channel: str, username: str | None, records: li
         f"- Search queries: {', '.join(f'`{q}`' for q in args.query) if args.query else 'none'}",
         f"- Per-query limit: `{args.limit}`",
         f"- Latest scan limit: `{args.scan_limit}`",
+        f"- Backfill limit: `{args.backfill_limit}`",
+        f"- Backfill min id: `{args.backfill_min_id}`",
+        f"- Backfill max id: `{args.backfill_max_id}`",
         f"- Total records: `{len(records)}`",
+    ]
+    if message_ids:
+        lines.append(f"- Message id range: `{message_ids[0]}` to `{message_ids[-1]}`.")
+    backfill_ids = sorted(record.id for record in records if record.source_mode == "backfill" and record.id)
+    if backfill_ids:
+        lines.append(f"- Backfill checkpoint: next `--backfill-min-id {backfill_ids[-1]}`.")
+    else:
+        lines.append("- Backfill checkpoint: not available from this non-backfill artifact.")
+    if dates:
+        lines.append(f"- Message date range: `{dates[0]}` to `{dates[-1]}`.")
+    lines.extend([
+        "",
+        "## Source Modes",
+        "",
+    ])
+    for mode, count in sorted(by_mode.items()):
+        lines.append(f"- `{mode}`: {count}")
+    lines.extend([
         "",
         "## Counts",
         "",
-    ]
+    ])
     for query, count in sorted(by_query.items()):
         lines.append(f"- `{query}`: {count}")
 
@@ -210,7 +261,7 @@ def write_summary(path: Path, *, channel: str, username: str | None, records: li
             if record.file_name:
                 media += f"; file=`{record.file_name}`"
         lines.append(
-            f"- query=`{record.query or '(latest-scan)'}` id=`{record.id}` date=`{record.date or 'unknown'}` "
+            f"- mode=`{record.source_mode}` query=`{record.query or f'({record.source_mode})'}` id=`{record.id}` date=`{record.date or 'unknown'}` "
             f"link={record.link or 'n/a'}{media}: {safe_snippet(record.text)}"
         )
 
@@ -249,12 +300,34 @@ async def collect(args: argparse.Namespace) -> dict[str, Any]:
         username = getattr(entity, "username", None) or channel
 
         for query in args.query:
-            async for message in client.iter_messages(entity, search=query, limit=max(1, args.limit)):
-                records.append(to_record(query, username, message))
+            async for message in client.iter_messages(
+                entity,
+                search=query,
+                limit=max(1, args.limit),
+                wait_time=args.wait_time,
+            ):
+                records.append(to_record("query", query, username, message))
 
         if args.scan_limit > 0:
-            async for message in client.iter_messages(entity, limit=args.scan_limit):
-                records.append(to_record(None, username, message))
+            async for message in client.iter_messages(
+                entity,
+                limit=args.scan_limit,
+                wait_time=args.wait_time,
+            ):
+                records.append(to_record("latest-scan", None, username, message))
+
+        if args.backfill_limit > 0:
+            backfill_kwargs: dict[str, Any] = {
+                "limit": args.backfill_limit,
+                "reverse": True,
+                "wait_time": args.wait_time,
+            }
+            if args.backfill_min_id > 0:
+                backfill_kwargs["min_id"] = args.backfill_min_id
+            if args.backfill_max_id > 0:
+                backfill_kwargs["max_id"] = args.backfill_max_id
+            async for message in client.iter_messages(entity, **backfill_kwargs):
+                records.append(to_record("backfill", None, username, message))
 
     raw_path = output_dir / "telegram-channel-records.ndjson"
     summary_path = output_dir / "telegram-channel-summary.md"
@@ -269,6 +342,11 @@ async def collect(args: argparse.Namespace) -> dict[str, Any]:
         "resolved_username": username,
         "query_count": len(args.query),
         "record_count": len(records),
+        "backfill_limit": args.backfill_limit,
+        "backfill_min_id": args.backfill_min_id,
+        "backfill_max_id": args.backfill_max_id,
+        "min_message_id": min((record.id for record in records if record.id), default=None),
+        "max_message_id": max((record.id for record in records if record.id), default=None),
         "raw_path": str(raw_path),
         "summary_path": str(summary_path),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -279,6 +357,8 @@ async def collect(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     args = parse_args()
+    if not args.query and args.scan_limit <= 0 and args.backfill_limit <= 0:
+        raise SystemExit("provide at least one --query, --scan-limit > 0 or --backfill-limit > 0")
     result = asyncio.run(collect(args))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0
