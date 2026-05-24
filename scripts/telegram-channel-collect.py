@@ -347,6 +347,8 @@ async def collect(args: argparse.Namespace) -> dict[str, Any]:
         "backfill_max_id": args.backfill_max_id,
         "min_message_id": min((record.id for record in records if record.id), default=None),
         "max_message_id": max((record.id for record in records if record.id), default=None),
+        "min_backfill_message_id": min((record.id for record in records if record.source_mode == "backfill" and record.id), default=None),
+        "max_backfill_message_id": max((record.id for record in records if record.source_mode == "backfill" and record.id), default=None),
         "raw_path": str(raw_path),
         "summary_path": str(summary_path),
         "generated_at": datetime.now(timezone.utc).isoformat(),
