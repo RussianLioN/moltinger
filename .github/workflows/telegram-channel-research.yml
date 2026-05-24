@@ -1,0 +1,91 @@
+name: Telegram Channel Research
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Telegram channel or group username"
+        required: true
+        default: "routerich"
+        type: string
+      queries:
+        description: "Newline-separated search queries"
+        required: true
+        default: |
+          белые списки
+          ZeroBlock
+          подписка БС
+          24.10.6
+          FM350
+        type: string
+      limit:
+        description: "Max messages per query"
+        required: true
+        default: "30"
+        type: string
+      scan_limit:
+        description: "Optional latest-message scan limit; 0 disables latest scan"
+        required: true
+        default: "0"
+        type: string
+      artifact_name:
+        description: "Artifact name"
+        required: true
+        default: "telegram-channel-research-routerich"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Read Telegram channel with MTProto
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TELEGRAM_TEST_API_ID: ${{ secrets.TELEGRAM_TEST_API_ID }}
+      TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
+      TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Telethon
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --quiet telethon
+
+      - name: Collect channel evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_dir="${RUNNER_TEMP}/telegram-channel-research"
+          mkdir -p "$result_dir"
+
+          query_args=()
+          while IFS= read -r query; do
+            [[ -z "${query// }" ]] && continue
+            query_args+=(--query "$query")
+          done <<< "${{ inputs.queries }}"
+
+          python3 scripts/telegram-channel-collect.py \
+            --channel "${{ inputs.channel }}" \
+            --limit "${{ inputs.limit }}" \
+            --scan-limit "${{ inputs.scan_limit }}" \
+            --output-dir "$result_dir" \
+            "${query_args[@]}"
+
+      - name: Upload channel research artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/telegram-channel-research/
+          if-no-files-found: error
+
+      - name: Append safe summary
+        shell: bash
+        run: |
+          summary_file="${RUNNER_TEMP}/telegram-channel-research/telegram-channel-summary.md"
+          if [[ -f "$summary_file" ]]; then
+            cat "$summary_file" >> "$GITHUB_STEP_SUMMARY"
+          fi

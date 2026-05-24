@@ -1416,6 +1416,27 @@
         "telegram-session-bootstrap"
       ]
     },
+    "telegram-channel-collect.py": {
+      "version": "1.0.0",
+      "description": "Read-only MTProto channel collector for research artifacts",
+      "entrypoint": true,
+      "requires": [
+        "python3"
+      ],
+      "provides": [
+        "telegram",
+        "mtproto",
+        "channel-research"
+      ],
+      "env_vars": [
+        "TELEGRAM_TEST_API_ID",
+        "TELEGRAM_TEST_API_HASH",
+        "TELEGRAM_TEST_SESSION",
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION"
+      ]
+    },
     "worktree-ready.sh": {
       "version": "1.0.0",
       "description": "Deterministic helper for worktree planning, readiness reporting, doctor mode, handoff generation, and repo-local Beads runtime repair",
