@@ -1,7 +1,7 @@
 # Secrets Management Policy
 
 **Version**: 1.0
-**Last Updated**: 2026-03-07
+**Last Updated**: 2026-05-24
 
 ---
 
@@ -61,6 +61,8 @@ gh secret set SECRET_NAME --repo owner/repo
 env:
   OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 ```
+
+Telegram-диагностика `real_user` и утилиты чтения каналов также используют GitHub Secrets напрямую. Они не должны копировать `TELEGRAM_TEST_API_HASH` или `TELEGRAM_TEST_SESSION` в отслеживаемые git-файлы.
 
 ### 2. Environment Variables via CI/CD
 
@@ -171,6 +173,8 @@ For on-demand Telegram E2E harness:
 - `synthetic` mode requires only `MOLTIS_PASSWORD`.
 - `real_user` mode requires `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, and `TELEGRAM_TEST_SESSION`; `TELEGRAM_TEST_BOT_USERNAME` is optional.
 - `TELEGRAM_TEST_SESSION` is generated once via `scripts/telegram-real-user-bootstrap.py` (OTP login).
+- Та же схема хранения переиспользуется для чтения каналов через MTProto: `docs/TELEGRAM-MTPROTO-SECRETS-REUSE.md`.
+- `TELEGRAM_TEST_SESSION` - это переиспользуемая авторизация Telegram-аккаунта. GitHub может показать имена секретов и даты обновления, но не возвращает сохраненные значения.
 
 ### LLM Failover Secrets
 

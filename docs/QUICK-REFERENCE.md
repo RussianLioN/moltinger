@@ -12,6 +12,7 @@
 | **Web UI** | https://moltis.ainetic.tech | Веб-интерфейс |
 | **SESSION_SUMMARY.md** | /SESSION_SUMMARY.md | Статус проекта |
 | **Инструкция для LLM** | docs/knowledge/MOLTIS-SELF-LEARNING-INSTRUCTION.md | Самообучение Moltis |
+| **Telegram MTProto: секреты** | docs/TELEGRAM-MTPROTO-SECRETS-REUSE.md | Переиспользование `TELEGRAM_TEST_API_ID`, `TELEGRAM_TEST_API_HASH`, `TELEGRAM_TEST_SESSION` для чтения каналов |
 
 ---
 
@@ -90,6 +91,7 @@ systemctl enable --now moltis-telegram-web-user-monitor.timer
 User-monitor: `docs/TELEGRAM-USER-MONITOR.md`
 No-API_HASH monitor: `docs/TELEGRAM-WEB-USER-MONITOR.md`
 Clean deploy runbook: `docs/CLEAN-DEPLOY-TELEGRAM-WEB-USER-MONITOR.md`
+Секреты для чтения каналов через MTProto: `docs/TELEGRAM-MTPROTO-SECRETS-REUSE.md`
 
 ---
 
@@ -138,6 +140,9 @@ make logs LOGS_OPTS=-f
 |--------|--------|---------|
 | TELEGRAM_BOT_TOKEN | ✅ | Bot token |
 | TELEGRAM_ALLOWED_USERS | ✅ | Allowed user IDs |
+| TELEGRAM_TEST_API_ID | ✅/optional | MTProto-диагностика `real_user` и чтение каналов |
+| TELEGRAM_TEST_API_HASH | ✅/optional | MTProto-диагностика `real_user` и чтение каналов |
+| TELEGRAM_TEST_SESSION | ✅/optional | Сериализованная пользовательская сессия Telethon |
 | OLLAMA_API_KEY | ✅/optional | Ollama Cloud fallback |
 | SSH_PRIVATE_KEY | ✅ | Deploy |
 
