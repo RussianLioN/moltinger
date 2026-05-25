@@ -156,6 +156,7 @@ async def recover(args: argparse.Namespace) -> int:
     api_hash = required_env("TELEGRAM_TEST_API_HASH")
     bot_token = required_env("TELEGRAM_BOT_TOKEN")
     chat_id = required_env("TELEGRAM_SESSION_RECOVERY_CHAT_ID")
+    password_configured = bool(os.environ.get("TELEGRAM_TEST_2FA_PASSWORD", "").strip())
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -165,6 +166,17 @@ async def recover(args: argparse.Namespace) -> int:
 
     if not args.public_key.exists():
         write_json(result_path, {"status": "precondition_failed", "reason": "public key not found"})
+        return 2
+    if args.require_2fa_password and not password_configured:
+        write_json(
+            result_path,
+            {
+                "status": "precondition_failed",
+                "reason": "TELEGRAM_TEST_2FA_PASSWORD is empty or unavailable",
+            },
+        )
+        print("status: precondition_failed")
+        print("reason: TELEGRAM_TEST_2FA_PASSWORD is empty or unavailable")
         return 2
 
     client = TelegramClient(StringSession(), api_id, api_hash, device_model="routerich-session-recovery")
@@ -241,6 +253,11 @@ def main() -> int:
     parser.add_argument("--public-key", type=Path, required=True, help="PEM public key for artifact encryption.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for encrypted artifact files.")
     parser.add_argument("--timeout-sec", type=int, default=600, help="QR approval timeout.")
+    parser.add_argument(
+        "--require-2fa-password",
+        action="store_true",
+        help="Fail before QR delivery if TELEGRAM_TEST_2FA_PASSWORD is empty.",
+    )
     return asyncio.run(recover(parser.parse_args()))
 
 

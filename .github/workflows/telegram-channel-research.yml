@@ -140,7 +140,8 @@ jobs:
           python3 scripts/telegram-session-recover.py \
             --public-key "$result_dir/recovery-public.pem" \
             --output-dir "$result_dir" \
-            --timeout-sec "${{ inputs.recovery_timeout_sec }}"
+            --timeout-sec "${{ inputs.recovery_timeout_sec }}" \
+            --require-2fa-password
 
       - name: Upload channel research artifact
         if: ${{ inputs.mode == 'collect' }}
