@@ -20,6 +20,7 @@ import stat
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -85,6 +86,39 @@ def send_qr_document(bot_token: str, chat_id: str, document_path: Path, timeout_
 
     if not payload.get("ok"):
         raise RuntimeError(f"Telegram bot sendDocument failed: {payload.get('description', 'unknown')}")
+
+
+def send_login_link(bot_token: str, chat_id: str, login_url: str, timeout_sec: int) -> None:
+    text = (
+        "Routerich MTProto session recovery login.\n"
+        "Tap the button below from your Telegram client. If the button does not open, "
+        "copy the temporary link from this message and open it in Telegram.\n"
+        f"Expires in about {timeout_sec} seconds.\n\n"
+        f"{login_url}"
+    )
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": json.dumps(
+            {"inline_keyboard": [[{"text": "Approve Telegram login", "url": login_url}]]},
+            ensure_ascii=False,
+        ),
+        "disable_web_page_preview": "true",
+    }
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=urllib.parse.urlencode(data).encode("utf-8"),
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        details = exc.read().decode("utf-8", "replace")
+        raise RuntimeError(f"Telegram bot sendMessage failed: HTTP {exc.code}: {details}") from exc
+
+    if not payload.get("ok"):
+        raise RuntimeError(f"Telegram bot sendMessage failed: {payload.get('description', 'unknown')}")
 
 
 def encrypt_session(session_path: Path, public_key: Path, output_dir: Path) -> None:
@@ -183,6 +217,7 @@ async def recover(args: argparse.Namespace) -> int:
     await client.connect()
     try:
         qr_login = await client.qr_login()
+        send_login_link(bot_token, chat_id, qr_login.url, args.timeout_sec)
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -196,7 +231,7 @@ async def recover(args: argparse.Namespace) -> int:
         chmod_owner_only(qr_path)
         send_qr_document(bot_token, chat_id, qr_path, args.timeout_sec)
         print("status: waiting_for_qr_approval")
-        print("qr_delivery: telegram_bot")
+        print("qr_delivery: telegram_bot_link_and_document")
         print(f"timeout_sec: {args.timeout_sec}")
 
         try:
