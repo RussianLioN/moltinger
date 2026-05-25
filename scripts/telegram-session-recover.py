@@ -194,9 +194,18 @@ async def recover(args: argparse.Namespace) -> int:
             print("status: timeout")
             return 3
         except SessionPasswordNeededError:
-            write_json(result_path, {"status": "two_factor_required", "reason": "2FA password required"})
-            print("status: two_factor_required")
-            return 4
+            password = os.environ.get("TELEGRAM_TEST_2FA_PASSWORD", "").strip()
+            if not password:
+                write_json(result_path, {"status": "two_factor_required", "reason": "2FA password required"})
+                print("status: two_factor_required")
+                return 4
+            try:
+                user = await client.sign_in(password=password)
+            except RPCError as exc:
+                write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
+                print("status: upstream_failed")
+                print(f"reason: {exc.__class__.__name__}")
+                return 3
         except RPCError as exc:
             write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
             print("status: upstream_failed")
