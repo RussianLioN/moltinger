@@ -68,6 +68,11 @@ on:
         required: true
         default: "600"
         type: string
+      recovery_method:
+        description: "Recovery login method: qr or otp"
+        required: true
+        default: "qr"
+        type: string
 
 permissions:
   contents: read
@@ -82,6 +87,7 @@ jobs:
       TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
       TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
       TELEGRAM_TEST_2FA_PASSWORD: ${{ secrets.TELEGRAM_TEST_2FA_PASSWORD }}
+      TELEGRAM_TEST_PHONE: ${{ secrets.TELEGRAM_TEST_PHONE }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_SESSION_RECOVERY_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
     steps:
@@ -141,6 +147,7 @@ jobs:
             --public-key "$result_dir/recovery-public.pem" \
             --output-dir "$result_dir" \
             --timeout-sec "${{ inputs.recovery_timeout_sec }}" \
+            --method "${{ inputs.recovery_method }}" \
             --require-2fa-password
 
       - name: Upload channel research artifact
@@ -152,7 +159,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload encrypted session recovery artifact
-        if: ${{ inputs.mode == 'recover_session' }}
+        if: ${{ always() && inputs.mode == 'recover_session' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}
@@ -160,7 +167,7 @@ jobs:
             ${{ runner.temp }}/telegram-session-recovery/recovery-result.json
             ${{ runner.temp }}/telegram-session-recovery/telegram-session.enc
             ${{ runner.temp }}/telegram-session-recovery/telegram-session.key.enc
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Append safe summary
         if: ${{ inputs.mode == 'collect' }}

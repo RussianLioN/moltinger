@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Recover a Telegram MTProto StringSession through QR login.
+"""Recover a Telegram MTProto StringSession through QR or OTP login.
 
 Safety contract:
 - reads Telegram API and bot credentials only from environment;
-- sends the QR code through the configured Telegram bot chat;
-- never prints or uploads the raw StringSession, API hash, bot token, or QR URL;
+- sends only login prompts through the configured Telegram bot chat;
+- never prints or uploads the raw StringSession, API hash, bot token, QR URL, phone or OTP;
 - stores only an encrypted session artifact for local decryption.
 """
 
@@ -19,10 +19,15 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+
+class TelegramBotUpdateError(RuntimeError):
+    """Raised when the recovery bot cannot read operator replies."""
 
 
 def required_env(name: str) -> str:
@@ -121,6 +126,76 @@ def send_login_link(bot_token: str, chat_id: str, login_url: str, timeout_sec: i
         raise RuntimeError(f"Telegram bot sendMessage failed: {payload.get('description', 'unknown')}")
 
 
+def send_message(bot_token: str, chat_id: str, text: str) -> None:
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": "true",
+    }
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=urllib.parse.urlencode(data).encode("utf-8"),
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not payload.get("ok"):
+        raise RuntimeError(f"Telegram bot sendMessage failed: {payload.get('description', 'unknown')}")
+
+
+def get_updates(bot_token: str, offset: int | None, timeout: int) -> list[dict[str, object]]:
+    data = {"timeout": str(timeout)}
+    if offset is not None:
+        data["offset"] = str(offset)
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/getUpdates",
+        data=urllib.parse.urlencode(data).encode("utf-8"),
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout + 35) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        details = exc.read().decode("utf-8", "replace")
+        raise TelegramBotUpdateError(f"HTTP {exc.code}: {details}") from exc
+    if not payload.get("ok"):
+        raise TelegramBotUpdateError(str(payload.get("description", "unknown")))
+    return list(payload.get("result") or [])
+
+
+def next_update_offset(updates: list[dict[str, object]]) -> int | None:
+    update_ids = [int(update["update_id"]) for update in updates if "update_id" in update]
+    if not update_ids:
+        return None
+    return max(update_ids) + 1
+
+
+def extract_otp(text: str) -> str | None:
+    digits = "".join(ch if ch.isdigit() else " " for ch in text)
+    for chunk in digits.split():
+        if 5 <= len(chunk) <= 6:
+            return chunk
+    return None
+
+
+def poll_otp_code(bot_token: str, chat_id: str, offset: int | None, timeout_sec: int) -> str | None:
+    start = time.time()
+    while time.time() - start < timeout_sec:
+        updates = get_updates(bot_token, offset=offset, timeout=15)
+        for update in updates:
+            offset = int(update["update_id"]) + 1
+            message = update.get("message")
+            if not isinstance(message, dict):
+                continue
+            if str(message.get("chat", {}).get("id", "")) != str(chat_id):
+                continue
+            text = str(message.get("text", "")).strip()
+            otp = extract_otp(text)
+            if otp:
+                return otp
+    return None
+
+
 def encrypt_session(session_path: Path, public_key: Path, output_dir: Path) -> None:
     if not shutil.which("openssl"):
         raise RuntimeError("openssl is required for encrypted session artifact")
@@ -176,6 +251,29 @@ def encrypt_session(session_path: Path, public_key: Path, output_dir: Path) -> N
         session_path.unlink(missing_ok=True)
 
 
+async def finish_login_with_password(client: object, password: str, result_path: Path) -> object | None:
+    try:
+        return await client.sign_in(password=password)
+    except Exception as exc:
+        write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
+        print("status: upstream_failed")
+        print(f"reason: {exc.__class__.__name__}")
+        return None
+
+
+def write_completed_result(result_path: Path, user: object, session: str) -> None:
+    write_json(
+        result_path,
+        {
+            "status": "completed",
+            "user_id": getattr(user, "id", "unknown"),
+            "username": getattr(user, "username", None) or "none",
+            "session_length": len(session),
+            "artifact_files": ["telegram-session.enc", "telegram-session.key.enc"],
+        },
+    )
+
+
 async def recover(args: argparse.Namespace) -> int:
     try:
         from telethon import TelegramClient  # type: ignore
@@ -190,6 +288,7 @@ async def recover(args: argparse.Namespace) -> int:
     api_hash = required_env("TELEGRAM_TEST_API_HASH")
     bot_token = required_env("TELEGRAM_BOT_TOKEN")
     chat_id = required_env("TELEGRAM_SESSION_RECOVERY_CHAT_ID")
+    phone = os.environ.get("TELEGRAM_TEST_PHONE", "").strip()
     password_configured = bool(os.environ.get("TELEGRAM_TEST_2FA_PASSWORD", "").strip())
 
     output_dir = args.output_dir
@@ -216,6 +315,100 @@ async def recover(args: argparse.Namespace) -> int:
     client = TelegramClient(StringSession(), api_id, api_hash, device_model="routerich-session-recovery")
     await client.connect()
     try:
+        if args.method == "otp":
+            if not phone:
+                write_json(result_path, {"status": "precondition_failed", "reason": "TELEGRAM_TEST_PHONE is empty"})
+                print("status: precondition_failed")
+                print("reason: TELEGRAM_TEST_PHONE is empty")
+                return 2
+
+            try:
+                otp_offset = next_update_offset(get_updates(bot_token, offset=None, timeout=0))
+            except TelegramBotUpdateError as exc:
+                write_json(
+                    result_path,
+                    {
+                        "status": "precondition_failed",
+                        "reason": "Telegram bot cannot read replies through getUpdates",
+                        "detail": str(exc)[:200],
+                    },
+                )
+                print("status: precondition_failed")
+                print("reason: telegram_bot_getupdates_unavailable")
+                return 2
+            try:
+                sent = await client.send_code_request(phone)
+            except RPCError as exc:
+                write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
+                print("status: upstream_failed")
+                print(f"reason: {exc.__class__.__name__}")
+                return 3
+            try:
+                send_message(
+                    bot_token,
+                    chat_id,
+                    "Routerich MTProto session recovery: Telegram sent a login code to your account. "
+                    "Reply to this bot chat with the 5-digit login code only. "
+                    f"Timeout: {args.timeout_sec} seconds.",
+                )
+            except RuntimeError as exc:
+                write_json(
+                    result_path,
+                    {
+                        "status": "precondition_failed",
+                        "reason": "Telegram bot cannot send recovery prompt",
+                        "detail": str(exc)[:200],
+                    },
+                )
+                print("status: precondition_failed")
+                print("reason: telegram_bot_send_unavailable")
+                return 2
+            print("status: waiting_for_otp_code")
+            print("otp_delivery: telegram_account")
+            try:
+                otp = await asyncio.to_thread(poll_otp_code, bot_token, chat_id, otp_offset, args.timeout_sec)
+            except TelegramBotUpdateError as exc:
+                write_json(
+                    result_path,
+                    {
+                        "status": "precondition_failed",
+                        "reason": "Telegram bot cannot read replies through getUpdates",
+                        "detail": str(exc)[:200],
+                    },
+                )
+                print("status: precondition_failed")
+                print("reason: telegram_bot_getupdates_unavailable")
+                return 2
+            if not otp:
+                write_json(result_path, {"status": "timeout", "reason": "OTP code timeout"})
+                print("status: timeout")
+                return 3
+            try:
+                user = await client.sign_in(phone=phone, code=otp, phone_code_hash=sent.phone_code_hash)
+            except SessionPasswordNeededError:
+                password = os.environ.get("TELEGRAM_TEST_2FA_PASSWORD", "").strip()
+                if not password:
+                    write_json(result_path, {"status": "two_factor_required", "reason": "2FA password required"})
+                    print("status: two_factor_required")
+                    return 4
+                user = await finish_login_with_password(client, password, result_path)
+                if user is None:
+                    return 3
+            except RPCError as exc:
+                write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
+                print("status: upstream_failed")
+                print(f"reason: {exc.__class__.__name__}")
+                return 3
+
+            session = client.session.save()
+            session_path.write_text(session + "\n", encoding="utf-8")
+            chmod_owner_only(session_path)
+            encrypt_session(session_path, args.public_key, output_dir)
+            write_completed_result(result_path, user, session)
+            print("status: completed")
+            print("artifact: encrypted_session")
+            return 0
+
         qr_login = await client.qr_login()
         send_login_link(bot_token, chat_id, qr_login.url, args.timeout_sec)
         qr = qrcode.QRCode(
@@ -246,12 +439,8 @@ async def recover(args: argparse.Namespace) -> int:
                 write_json(result_path, {"status": "two_factor_required", "reason": "2FA password required"})
                 print("status: two_factor_required")
                 return 4
-            try:
-                user = await client.sign_in(password=password)
-            except RPCError as exc:
-                write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
-                print("status: upstream_failed")
-                print(f"reason: {exc.__class__.__name__}")
+            user = await finish_login_with_password(client, password, result_path)
+            if user is None:
                 return 3
         except RPCError as exc:
             write_json(result_path, {"status": "upstream_failed", "reason": exc.__class__.__name__})
@@ -265,16 +454,7 @@ async def recover(args: argparse.Namespace) -> int:
         encrypt_session(session_path, args.public_key, output_dir)
         qr_path.unlink(missing_ok=True)
 
-        write_json(
-            result_path,
-            {
-                "status": "completed",
-                "user_id": getattr(user, "id", "unknown"),
-                "username": getattr(user, "username", None) or "none",
-                "session_length": len(session),
-                "artifact_files": ["telegram-session.enc", "telegram-session.key.enc"],
-            },
-        )
+        write_completed_result(result_path, user, session)
         print("status: completed")
         print("artifact: encrypted_session")
         return 0
@@ -287,7 +467,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Recover encrypted Telegram MTProto StringSession.")
     parser.add_argument("--public-key", type=Path, required=True, help="PEM public key for artifact encryption.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for encrypted artifact files.")
-    parser.add_argument("--timeout-sec", type=int, default=600, help="QR approval timeout.")
+    parser.add_argument("--timeout-sec", type=int, default=600, help="Login approval or OTP timeout.")
+    parser.add_argument("--method", choices=("qr", "otp"), default="qr", help="Login recovery method.")
     parser.add_argument(
         "--require-2fa-password",
         action="store_true",
