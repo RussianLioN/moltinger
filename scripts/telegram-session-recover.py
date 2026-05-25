@@ -40,11 +40,12 @@ def write_json(path: Path, data: dict[str, object]) -> None:
     chmod_owner_only(path)
 
 
-def send_qr_photo(bot_token: str, chat_id: str, photo_path: Path, timeout_sec: int) -> None:
+def send_qr_document(bot_token: str, chat_id: str, document_path: Path, timeout_sec: int) -> None:
     boundary = f"----routerich-session-recovery-{secrets.token_hex(16)}"
     caption = (
         "Routerich MTProto session recovery QR.\n"
         "Open Telegram Settings -> Devices -> Link Desktop Device and scan this QR.\n"
+        "Sent as an uncompressed PNG document; open it full-size before scanning.\n"
         f"Expires in about {timeout_sec} seconds."
     )
 
@@ -61,16 +62,16 @@ def send_qr_photo(bot_token: str, chat_id: str, photo_path: Path, timeout_sec: i
     body.extend(
         (
             f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="photo"; filename="telegram-login-qr.png"\r\n'
+            'Content-Disposition: form-data; name="document"; filename="telegram-login-qr.png"\r\n'
             "Content-Type: image/png\r\n\r\n"
         ).encode("utf-8")
     )
-    body.extend(photo_path.read_bytes())
+    body.extend(document_path.read_bytes())
     body.extend(b"\r\n")
     body.extend(f"--{boundary}--\r\n".encode("utf-8"))
 
     request = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+        f"https://api.telegram.org/bot{bot_token}/sendDocument",
         data=bytes(body),
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
@@ -80,10 +81,10 @@ def send_qr_photo(bot_token: str, chat_id: str, photo_path: Path, timeout_sec: i
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         details = exc.read().decode("utf-8", "replace")
-        raise RuntimeError(f"Telegram bot sendPhoto failed: HTTP {exc.code}: {details}") from exc
+        raise RuntimeError(f"Telegram bot sendDocument failed: HTTP {exc.code}: {details}") from exc
 
     if not payload.get("ok"):
-        raise RuntimeError(f"Telegram bot sendPhoto failed: {payload.get('description', 'unknown')}")
+        raise RuntimeError(f"Telegram bot sendDocument failed: {payload.get('description', 'unknown')}")
 
 
 def encrypt_session(session_path: Path, public_key: Path, output_dir: Path) -> None:
@@ -170,10 +171,18 @@ async def recover(args: argparse.Namespace) -> int:
     await client.connect()
     try:
         qr_login = await client.qr_login()
-        img = qrcode.make(qr_login.url)
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=18,
+            border=6,
+        )
+        qr.add_data(qr_login.url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
         img.save(qr_path)
         chmod_owner_only(qr_path)
-        send_qr_photo(bot_token, chat_id, qr_path, args.timeout_sec)
+        send_qr_document(bot_token, chat_id, qr_path, args.timeout_sec)
         print("status: waiting_for_qr_approval")
         print("qr_delivery: telegram_bot")
         print(f"timeout_sec: {args.timeout_sec}")
