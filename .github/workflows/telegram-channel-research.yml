@@ -54,7 +54,7 @@ on:
         default: "telegram-channel-research-routerich"
         type: string
       mode:
-        description: "collect or recover_session"
+        description: "collect, recover_session, or export_credentials"
         required: true
         default: "collect"
         type: string
@@ -150,6 +150,24 @@ jobs:
             --method "${{ inputs.recovery_method }}" \
             --require-2fa-password
 
+      - name: Export encrypted Telegram credentials
+        if: ${{ inputs.mode == 'export_credentials' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_dir="${RUNNER_TEMP}/telegram-credentials-export"
+          mkdir -p "$result_dir"
+
+          if [[ -z "${{ inputs.recovery_public_key_b64 }}" ]]; then
+            echo "recovery_public_key_b64 is required for export_credentials" >&2
+            exit 2
+          fi
+
+          printf '%s' "${{ inputs.recovery_public_key_b64 }}" | base64 -d > "$result_dir/recovery-public.pem"
+          python3 scripts/telegram-credentials-export.py \
+            --public-key "$result_dir/recovery-public.pem" \
+            --output-dir "$result_dir"
+
       - name: Upload channel research artifact
         if: ${{ inputs.mode == 'collect' }}
         uses: actions/upload-artifact@v7
@@ -168,6 +186,17 @@ jobs:
             ${{ runner.temp }}/telegram-session-recovery/telegram-session.enc
             ${{ runner.temp }}/telegram-session-recovery/telegram-session.key.enc
           if-no-files-found: warn
+
+      - name: Upload encrypted Telegram credentials artifact
+        if: ${{ inputs.mode == 'export_credentials' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials-result.json
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials.env.enc
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials.key.enc
+          if-no-files-found: error
 
       - name: Append safe summary
         if: ${{ inputs.mode == 'collect' }}
