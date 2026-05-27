@@ -316,6 +316,19 @@ async def recover(args: argparse.Namespace) -> int:
     await client.connect()
     try:
         if args.method == "otp":
+            write_json(
+                result_path,
+                {
+                    "status": "precondition_failed",
+                    "reason": "remote OTP recovery disabled",
+                    "next_action": "Use local terminal OTP recovery; do not send Telegram login codes to bot chats.",
+                },
+            )
+            print("status: precondition_failed")
+            print("reason: remote_otp_recovery_disabled")
+            print("next_action: use local terminal OTP recovery")
+            return 2
+
             if not phone:
                 write_json(result_path, {"status": "precondition_failed", "reason": "TELEGRAM_TEST_PHONE is empty"})
                 print("status: precondition_failed")

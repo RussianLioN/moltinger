@@ -69,7 +69,7 @@ on:
         default: "600"
         type: string
       recovery_method:
-        description: "Recovery login method: qr or otp"
+        description: "Recovery login method: qr only; otp is disabled because Telegram invalidates login codes sent to bot chats"
         required: true
         default: "qr"
         type: string
