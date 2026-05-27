@@ -74,6 +74,11 @@ on:
         default: "qr"
         type: string
 
+concurrency:
+  group: telegram-mtproto-single-session
+  cancel-in-progress: false
+  queue: max
+
 permissions:
   contents: read
 
