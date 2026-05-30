@@ -53,6 +53,31 @@ on:
         required: true
         default: "telegram-channel-research-routerich"
         type: string
+      mode:
+        description: "collect, recover_session, or export_credentials"
+        required: true
+        default: "collect"
+        type: string
+      recovery_public_key_b64:
+        description: "Base64 PEM public key for recover_session encrypted artifact"
+        required: false
+        default: ""
+        type: string
+      recovery_timeout_sec:
+        description: "QR approval timeout for recover_session"
+        required: true
+        default: "600"
+        type: string
+      recovery_method:
+        description: "Recovery login method: qr only; otp is disabled because Telegram invalidates login codes sent to bot chats"
+        required: true
+        default: "qr"
+        type: string
+
+concurrency:
+  group: telegram-mtproto-single-session
+  cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -66,16 +91,21 @@ jobs:
       TELEGRAM_TEST_API_ID: ${{ secrets.TELEGRAM_TEST_API_ID }}
       TELEGRAM_TEST_API_HASH: ${{ secrets.TELEGRAM_TEST_API_HASH }}
       TELEGRAM_TEST_SESSION: ${{ secrets.TELEGRAM_TEST_SESSION }}
+      TELEGRAM_TEST_2FA_PASSWORD: ${{ secrets.TELEGRAM_TEST_2FA_PASSWORD }}
+      TELEGRAM_TEST_PHONE: ${{ secrets.TELEGRAM_TEST_PHONE }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_SESSION_RECOVERY_CHAT_ID: ${{ secrets.MOLTIS_UPDATE_NOTIFY_TELEGRAM_CHAT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Install Telethon
+      - name: Install Telegram dependencies
         shell: bash
         run: |
-          python3 -m pip install --disable-pip-version-check --quiet telethon
+          python3 -m pip install --disable-pip-version-check --quiet telethon 'qrcode[pil]'
 
       - name: Collect channel evidence
+        if: ${{ inputs.mode == 'collect' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -104,14 +134,77 @@ jobs:
             "${wait_time_arg[@]}" \
             "${query_args[@]}"
 
+      - name: Recover encrypted MTProto session
+        if: ${{ inputs.mode == 'recover_session' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_dir="${RUNNER_TEMP}/telegram-session-recovery"
+          mkdir -p "$result_dir"
+
+          if [[ -z "${{ inputs.recovery_public_key_b64 }}" ]]; then
+            echo "recovery_public_key_b64 is required for recover_session" >&2
+            exit 2
+          fi
+
+          printf '%s' "${{ inputs.recovery_public_key_b64 }}" | base64 -d > "$result_dir/recovery-public.pem"
+          python3 scripts/telegram-session-recover.py \
+            --public-key "$result_dir/recovery-public.pem" \
+            --output-dir "$result_dir" \
+            --timeout-sec "${{ inputs.recovery_timeout_sec }}" \
+            --method "${{ inputs.recovery_method }}" \
+            --require-2fa-password
+
+      - name: Export encrypted Telegram credentials
+        if: ${{ inputs.mode == 'export_credentials' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_dir="${RUNNER_TEMP}/telegram-credentials-export"
+          mkdir -p "$result_dir"
+
+          if [[ -z "${{ inputs.recovery_public_key_b64 }}" ]]; then
+            echo "recovery_public_key_b64 is required for export_credentials" >&2
+            exit 2
+          fi
+
+          printf '%s' "${{ inputs.recovery_public_key_b64 }}" | base64 -d > "$result_dir/recovery-public.pem"
+          python3 scripts/telegram-credentials-export.py \
+            --public-key "$result_dir/recovery-public.pem" \
+            --output-dir "$result_dir"
+
       - name: Upload channel research artifact
+        if: ${{ inputs.mode == 'collect' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ runner.temp }}/telegram-channel-research/
           if-no-files-found: error
 
+      - name: Upload encrypted session recovery artifact
+        if: ${{ always() && inputs.mode == 'recover_session' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            ${{ runner.temp }}/telegram-session-recovery/recovery-result.json
+            ${{ runner.temp }}/telegram-session-recovery/telegram-session.enc
+            ${{ runner.temp }}/telegram-session-recovery/telegram-session.key.enc
+          if-no-files-found: warn
+
+      - name: Upload encrypted Telegram credentials artifact
+        if: ${{ inputs.mode == 'export_credentials' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials-result.json
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials.env.enc
+            ${{ runner.temp }}/telegram-credentials-export/telegram-credentials.key.enc
+          if-no-files-found: error
+
       - name: Append safe summary
+        if: ${{ inputs.mode == 'collect' }}
         shell: bash
         run: |
           summary_file="${RUNNER_TEMP}/telegram-channel-research/telegram-channel-summary.md"
